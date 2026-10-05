@@ -32,9 +32,51 @@ export interface paths {
         put?: never;
         /**
          * Ask whether an agent may perform an action.
-         * @description The agent is identified by its key. The service evaluates the permissions of the agent, then the rules of its organization, and answers with one of five verdicts. When the permissions refuse the action, they count as block. The most strict verdict wins. Rules in observation answer in the observed list and never change the verdict. Without any permission targeting the agent and without any active rule that answers, the verdict is allow. Sending the same action identifier again within 24 hours returns the same decision.
+         * @description The agent is identified by its key. The service evaluates the permissions of the agent, its budget, then the rules of its organization, and answers with one of five verdicts. When the permissions or the budget refuse the action, they count as block. The most strict verdict wins. Rules in observation answer in the observed list and never change the verdict. Without any permission targeting the agent, without a spent budget and without any active rule that answers, the verdict is allow. Sending the same action identifier again within 24 hours returns the same decision. A verdict that waits for a human answer carries an approval to poll.
          */
         post: operations["createDecision"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/approvals/{approval_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                approval_id: components["parameters"]["ApprovalID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Poll the wait for a human answer, following the poll mode of OpenID CIBA.
+         * @description The agent polls its own approval every interval seconds until the status is no longer pending. A poll that arrives less than interval seconds after the previous one receives 429 slow-down, and the agent then adds 5 seconds to its interval for all subsequent polls. An approval of another agent answers 404.
+         */
+        get: operations["getApproval"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/traces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send spans to the journal, in the OTLP/HTTP format of OpenTelemetry.
+         * @description The body is an ExportTraceServiceRequest of OTLP, in binary protobuf or in JSON. The service keeps the spans of the Paidwen SDK and the calls to a model described by the OpenTelemetry semantic conventions for generative AI, and rejects the other spans through the partial success of OTLP. It writes the organization, the agent and the retention of the journal on each span from the agent key, and never trusts these attributes from the client.
+         */
+        post: operations["exportTraces"];
         delete?: never;
         options?: never;
         head?: never;
@@ -197,6 +239,156 @@ export interface paths {
         patch: operations["updateRule"];
         trace?: never;
     };
+    "/v1/approval-groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the approval groups of the organization, in the order of their creation. */
+        get: operations["listApprovalGroups"];
+        put?: never;
+        /**
+         * Declare who approves, on which channel, and what happens without an answer.
+         * @description Naming a verdict in default_for makes the group the default group of that verdict, in place of the group that held it before.
+         */
+        post: operations["createApprovalGroup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/approval-groups/{group_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: components["parameters"]["GroupID"];
+            };
+            cookie?: never;
+        };
+        /** Read an approval group. */
+        get: operations["getApprovalGroup"];
+        put?: never;
+        post?: never;
+        /** Remove an approval group that no rule names. */
+        delete: operations["deleteApprovalGroup"];
+        options?: never;
+        head?: never;
+        /** Change an approval group, following JSON Merge Patch. */
+        patch: operations["updateApprovalGroup"];
+        trace?: never;
+    };
+    "/v1/approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the approvals of the organization, in the order of their creation. */
+        get: operations["listApprovals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/approvals/{approval_id}/answer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                approval_id: components["parameters"]["ApprovalID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve or deny an action that waits for a human answer.
+         * @description The first answer wins. An approval that is already answered or expired answers 409. Before the human accounts, the answer is attributed to the admin key that sends it.
+         */
+        post: operations["answerApproval"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/approval-links/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The secret of the personal link, 32 random bytes in unpadded base64url. */
+                token: components["parameters"]["LinkToken"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Show the approval behind the personal link of an email, without changing it.
+         * @description Mail link scanners open links by themselves, so opening the link never answers. The page shows the action and two buttons, which send the answer by a form.
+         */
+        get: operations["getApprovalLink"];
+        put?: never;
+        /**
+         * Answer the approval behind the personal link of an email.
+         * @description The link proves the identity of the member it was sent to. It serves once.
+         */
+        post: operations["answerApprovalLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/audit/actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export the audit of the actions decided in a period, in JSON or in CSV.
+         * @description The period runs from from, included, to to, excluded, and lasts at most 366 days. The audit is built from the journal only.
+         */
+        get: operations["exportAuditRecords"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/audit/actions/{action_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                action_id: components["parameters"]["ActionID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Answer who did an action, when, why, with which agent and with which permission.
+         * @description The record is built from the journal only, with the journal lines it comes from.
+         */
+        get: operations["getAuditRecord"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -281,6 +473,25 @@ export interface components {
             tool?: string;
             server?: string;
         };
+        /**
+         * @description The window of a budget, in UTC.
+         * @enum {string}
+         */
+        BudgetWindow: "daily" | "monthly";
+        /** @description The budget of the agent refused the action, and counts as block. The spent amount had reached the limit, or the spent amount and the estimated cost would exceed it. */
+        BudgetOutcome: {
+            exceeded: components["schemas"]["BudgetWindow"];
+            /**
+             * Format: double
+             * @description What the agent spent in the window before the decision, in US dollars.
+             */
+            spent_usd: number;
+            /**
+             * Format: double
+             * @description The limit of the window, in US dollars.
+             */
+            limit_usd: number;
+        };
         Decision: {
             /** Format: uuid */
             action_id: string;
@@ -290,9 +501,36 @@ export interface components {
             /** @description The rules in observation that answered. They never change the verdict. */
             observed: components["schemas"]["ObservedRule"][];
             permission?: components["schemas"]["PermissionOutcome"];
+            budget?: components["schemas"]["BudgetOutcome"];
             approval?: components["schemas"]["Approval"];
             /** Format: date-time */
             decided_at: string;
+        };
+        /**
+         * @description The state of an approval. pending waits for a human answer, approved and denied carry the answer, expired means no answer came before the deadline. They follow authorization_pending, the issued token, access_denied and expired_token of OpenID CIBA.
+         * @enum {string}
+         */
+        ApprovalState: "pending" | "approved" | "denied" | "expired";
+        /**
+         * @description What happens when no answer comes before the deadline. deny refuses the action, allow lets it run.
+         * @enum {string}
+         */
+        OnExpiry: "deny" | "allow";
+        /** @description The state of an approval, as the agent polls it. */
+        ApprovalStatus: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            action_id: string;
+            status: components["schemas"]["ApprovalState"];
+            /** Format: date-time */
+            expires_at: string;
+            /**
+             * Format: int32
+             * @description Seconds to wait between two polls.
+             */
+            interval: number;
+            on_expiry: components["schemas"]["OnExpiry"];
         };
         /** @description An error, in the format of RFC 9457. */
         Problem: {
@@ -311,6 +549,23 @@ export interface components {
         Labels: {
             [key: string]: string;
         };
+        /**
+         * Format: double
+         * @description A limit in US dollars, counted to the billionth of a dollar.
+         */
+        BudgetLimit: number;
+        /** @description The limits of the agent per calendar day and per calendar month, in UTC. At a limit, the agent receives block until the next window. */
+        Budget: {
+            daily_usd?: components["schemas"]["BudgetLimit"];
+            monthly_usd?: components["schemas"]["BudgetLimit"];
+        };
+        /** @description The limits to set. A limit set to null is removed. Null in place of the object removes the budget. */
+        BudgetPatch: {
+            /** Format: double */
+            daily_usd?: number | null;
+            /** Format: double */
+            monthly_usd?: number | null;
+        } | null;
         Agent: {
             /** Format: uuid */
             id: string;
@@ -323,6 +578,9 @@ export interface components {
             environment: components["schemas"]["Environment"];
             risk_level?: components["schemas"]["RiskLevel"];
             labels: components["schemas"]["Labels"];
+            budget?: components["schemas"]["Budget"];
+            /** @description Whether the journal keeps the content of the exchanges of the agent: the instructions, the messages and the parameters of the tools. */
+            record_content: boolean;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -337,6 +595,9 @@ export interface components {
             environment: components["schemas"]["Environment"];
             risk_level?: components["schemas"]["RiskLevel"];
             labels?: components["schemas"]["Labels"];
+            budget?: components["schemas"]["Budget"];
+            /** @default true */
+            record_content: boolean;
         };
         AgentPatch: {
             name?: string;
@@ -350,6 +611,8 @@ export interface components {
             labels?: {
                 [key: string]: string | null;
             } | null;
+            budget?: components["schemas"]["BudgetPatch"];
+            record_content?: boolean;
         };
         AgentList: {
             data: components["schemas"]["Agent"][];
@@ -409,6 +672,11 @@ export interface components {
             condition: string;
             verdict: components["schemas"]["Verdict"];
             mode: components["schemas"]["RuleMode"];
+            /**
+             * Format: uuid
+             * @description The approval group that answers this rule. Only a rule whose verdict waits for a human answer names a group. Without it, the default group of the verdict answers.
+             */
+            approval_group_id?: string;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -419,16 +687,182 @@ export interface components {
             condition: string;
             verdict: components["schemas"]["Verdict"];
             mode: components["schemas"]["RuleMode"];
+            /** Format: uuid */
+            approval_group_id?: string;
         };
         RulePatch: {
             name?: string | null;
             condition?: string;
             verdict?: components["schemas"]["Verdict"];
             mode?: components["schemas"]["RuleMode"];
+            /** Format: uuid */
+            approval_group_id?: string | null;
         };
         RuleList: {
             data: components["schemas"]["Rule"][];
             has_more: boolean;
+        };
+        /**
+         * @description A verdict that waits for a human answer.
+         * @enum {string}
+         */
+        WaitingVerdict: "require_approval" | "escalate";
+        /**
+         * Format: int32
+         * @description Seconds before a wait expires without an answer.
+         */
+        ExpiresIn: number;
+        ApprovalGroup: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @description The email addresses of the people who approve. Each receives the request by email, and may answer in Slack. */
+            members: string[];
+            /** @description The Slack channel that receives the request, in the workspace connected to the organization. */
+            slack_channel?: string;
+            expires_in: components["schemas"]["ExpiresIn"];
+            on_expiry: components["schemas"]["OnExpiry"];
+            /** @description The verdicts this group answers when a rule names no group. */
+            default_for: components["schemas"]["WaitingVerdict"][];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ApprovalGroupCreate: {
+            name: string;
+            members: string[];
+            slack_channel?: string;
+            /**
+             * Format: int32
+             * @default 300
+             */
+            expires_in: number;
+            /**
+             * @default deny
+             * @enum {string}
+             */
+            on_expiry: "deny" | "allow";
+            default_for?: components["schemas"]["WaitingVerdict"][];
+        };
+        ApprovalGroupPatch: {
+            name?: string;
+            members?: string[];
+            slack_channel?: string | null;
+            expires_in?: components["schemas"]["ExpiresIn"];
+            on_expiry?: components["schemas"]["OnExpiry"];
+            default_for?: components["schemas"]["WaitingVerdict"][];
+        };
+        ApprovalGroupList: {
+            data: components["schemas"]["ApprovalGroup"][];
+            has_more: boolean;
+        };
+        AgentReference: {
+            id: string;
+            name: string;
+        };
+        RuleReference: {
+            id: string;
+            name?: string;
+            condition?: string;
+        };
+        /**
+         * @description Where the answer came from. expiry means that no one answered before the deadline.
+         * @enum {string}
+         */
+        ApprovalChannel: "slack" | "email" | "api" | "expiry";
+        /** @description An action that waits, or waited, for a human answer. */
+        ApprovalRequest: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            action_id: string;
+            agent: components["schemas"]["AgentReference"];
+            tool: components["schemas"]["Tool"];
+            /** @description The parameters of the action. They are absent when the agent does not keep its content. */
+            params?: {
+                [key: string]: unknown;
+            };
+            cost?: components["schemas"]["Cost"];
+            verdict: components["schemas"]["WaitingVerdict"];
+            rule?: components["schemas"]["RuleReference"];
+            /** Format: uuid */
+            group_id?: string;
+            status: components["schemas"]["ApprovalState"];
+            /** Format: date-time */
+            expires_at: string;
+            on_expiry: components["schemas"]["OnExpiry"];
+            channel?: components["schemas"]["ApprovalChannel"];
+            /** @description The email of the approver, or the redacted admin key that answered through the API. */
+            answered_by?: string;
+            /** Format: date-time */
+            answered_at?: string;
+            comment?: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        ApprovalRequestList: {
+            data: components["schemas"]["ApprovalRequest"][];
+            has_more: boolean;
+        };
+        /** @enum {string} */
+        ApprovalAnswerValue: "approve" | "deny";
+        ApprovalAnswer: {
+            answer: components["schemas"]["ApprovalAnswerValue"];
+            comment?: string;
+        };
+        ApprovalLinkAnswer: {
+            answer: components["schemas"]["ApprovalAnswerValue"];
+        };
+        AuditApproval: {
+            /** Format: uuid */
+            id: string;
+            status: components["schemas"]["ApprovalState"];
+            channel?: components["schemas"]["ApprovalChannel"];
+            answered_by?: string;
+            /** Format: date-time */
+            answered_at?: string;
+            comment?: string;
+        };
+        /** @description The call of the tool by the agent, from its request until its return. */
+        AuditExecution: {
+            /** Format: date-time */
+            requested_at: string;
+            /**
+             * Format: date-time
+             * @description When the action left. Absent when the action never left.
+             */
+            started_at?: string;
+            /** Format: date-time */
+            ended_at: string;
+            /** @enum {string} */
+            status: "ok" | "error";
+            error_type?: string;
+        };
+        /** @description Who did an action, when, why, with which agent and with which permission, read from the journal only. */
+        AuditRecord: {
+            /** Format: uuid */
+            action_id: string;
+            agent: components["schemas"]["AgentReference"];
+            tool: components["schemas"]["Tool"];
+            params?: {
+                [key: string]: unknown;
+            };
+            cost?: components["schemas"]["Cost"];
+            session_id?: string;
+            /** Format: date-time */
+            decided_at: string;
+            verdict: components["schemas"]["Verdict"];
+            rule?: components["schemas"]["RuleReference"];
+            observed: components["schemas"]["ObservedRule"][];
+            permission?: components["schemas"]["PermissionOutcome"];
+            budget?: components["schemas"]["BudgetOutcome"];
+            approval?: components["schemas"]["AuditApproval"];
+            execution?: components["schemas"]["AuditExecution"];
+            /** @description The journal lines the record comes from, following contracts/journal.schema.json. */
+            lines?: {
+                [key: string]: unknown;
+            }[];
         };
         SnapshotAgent: {
             id: string;
@@ -441,20 +875,59 @@ export interface components {
             /** @description The SHA-256 digests of the active keys of the agent, in hexadecimal. */
             key_digests: string[];
             permissions?: components["schemas"]["AgentPermissions"];
+            budget?: components["schemas"]["SnapshotBudget"];
+            /** @default true */
+            record_content: boolean;
+        };
+        /** @description The limits of the agent, in billionths of a US dollar. */
+        SnapshotBudget: {
+            /** Format: int64 */
+            daily_nanousd?: number;
+            /** Format: int64 */
+            monthly_nanousd?: number;
         };
         SnapshotRule: {
             id: string;
+            name?: string;
             condition: string;
             verdict: components["schemas"]["Verdict"];
             mode: components["schemas"]["RuleMode"];
+            approval_group_id?: string;
         };
-        /** @description Everything the decision point needs to answer for one organization, held in memory: its revision, its agents with the digests of their active keys and their permissions, and its rules in the order of the organization. */
+        SnapshotApprovalGroup: {
+            id: string;
+            expires_in: components["schemas"]["ExpiresIn"];
+            on_expiry: components["schemas"]["OnExpiry"];
+        };
+        /** @description The approval group of each waiting verdict, when a rule names no group. */
+        SnapshotApprovalDefaults: {
+            require_approval?: string;
+            escalate?: string;
+        };
+        /** @description Everything the decision point needs to answer for one organization, held in memory: its revision, the retention of its journal, its approval groups, its agents with the digests of their active keys, their permissions and their budget, and its rules in the order of the organization. */
         Snapshot: {
             organization_id: string;
             /** Format: int64 */
             revision: number;
+            /**
+             * Format: int32
+             * @description The days the journal keeps a line of the organization, from its plan.
+             * @default 7
+             */
+            retention_days: number;
+            approval_groups?: components["schemas"]["SnapshotApprovalGroup"][];
+            approval_defaults?: components["schemas"]["SnapshotApprovalDefaults"];
             agents: components["schemas"]["SnapshotAgent"][];
             rules: components["schemas"]["SnapshotRule"][];
+        };
+        /** @description An approval group of a conformance case. Its identifier is local to the case. */
+        ConformanceApprovalGroup: {
+            id: string;
+            name: string;
+            members: string[];
+            expires_in?: components["schemas"]["ExpiresIn"];
+            on_expiry?: components["schemas"]["OnExpiry"];
+            default_for?: components["schemas"]["WaitingVerdict"][];
         };
         /** @description A rule of a conformance case. Its identifier is local to the case. */
         ConformanceRule: {
@@ -463,6 +936,8 @@ export interface components {
             condition: string;
             verdict: components["schemas"]["Verdict"];
             mode: components["schemas"]["RuleMode"];
+            /** @description The local identifier of the approval group that answers the rule. */
+            approval_group?: string;
         };
         ConformanceExpectation: {
             verdict: components["schemas"]["Verdict"];
@@ -471,14 +946,21 @@ export interface components {
             observed: components["schemas"]["ObservedRule"][];
             /** @description True when the decision carries an approval to wait for. */
             awaits_approval: boolean;
+            /**
+             * Format: int32
+             * @description The expected expires_in of the approval.
+             */
+            approval_expires_in?: number;
             permission?: components["schemas"]["PermissionOutcome"];
+            budget?: components["schemas"]["BudgetOutcome"];
         };
-        /** @description One example of the conformance suite: an agent, its permissions, the rules of its organization, a request and the expected decision. The server and both SDKs must pass every case. */
+        /** @description One example of the conformance suite: an agent, its permissions and its budget, the approval groups and the rules of its organization, a request and the expected decision. The server and both SDKs must pass every case. */
         ConformanceCase: {
             name: string;
             description: string;
             agent: components["schemas"]["AgentCreate"];
             permissions?: components["schemas"]["AgentPermissions"];
+            approval_groups?: components["schemas"]["ConformanceApprovalGroup"][];
             rules: components["schemas"]["ConformanceRule"][];
             request: components["schemas"]["DecisionRequest"];
             expected: components["schemas"]["ConformanceExpectation"];
@@ -559,6 +1041,26 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
+        /** @description The agent polls faster than the interval. It must add 5 seconds to its interval for this and all subsequent polls, as the slow_down error of OpenID CIBA requires. */
+        SlowDown: {
+            headers: {
+                /** @description The seconds to wait before the next poll. */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description The body is neither application/x-protobuf nor application/json. */
+        UnsupportedMediaType: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
     };
     parameters: {
         /** @description The number of items in the page, from 1 to 100. */
@@ -568,6 +1070,21 @@ export interface components {
         AgentID: string;
         KeyID: string;
         RuleID: string;
+        GroupID: string;
+        ApprovalID: string;
+        ActionID: string;
+        /** @description The secret of the personal link, 32 random bytes in unpadded base64url. */
+        LinkToken: string;
+        /** @description Only the approvals in this state. */
+        ApprovalStateFilter: components["schemas"]["ApprovalState"];
+        /** @description The start of the period, included. */
+        From: string;
+        /** @description The end of the period, excluded. */
+        To: string;
+        /** @description Only the actions of this agent. */
+        AgentFilter: string;
+        /** @description json for a JSON array of records, csv for a CSV file with one line per action. */
+        AuditFormat: "json" | "csv";
     };
     requestBodies: never;
     headers: never;
@@ -624,6 +1141,70 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ActionReused"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    getApproval: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                approval_id: components["parameters"]["ApprovalID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The state of the approval. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalStatus"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["SlowDown"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    exportTraces: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/x-protobuf": string;
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description The spans are accepted, maybe partially. The body is an ExportTraceServiceResponse of OTLP, in the encoding of the request. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-protobuf": string;
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["Unavailable"];
         };
@@ -1046,6 +1627,348 @@ export interface operations {
             404: components["responses"]["NotFound"];
             413: components["responses"]["PayloadTooLarge"];
             500: components["responses"]["InternalError"];
+        };
+    };
+    listApprovalGroups: {
+        parameters: {
+            query?: {
+                /** @description The number of items in the page, from 1 to 100. */
+                limit?: components["parameters"]["Limit"];
+                /** @description The identifier of the last item of the previous page. */
+                starting_after?: components["parameters"]["StartingAfter"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of approval groups. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalGroupList"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createApprovalGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApprovalGroupCreate"];
+            };
+        };
+        responses: {
+            /** @description The approval group is declared. */
+            201: {
+                headers: {
+                    /** @description The address of the approval group. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalGroup"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getApprovalGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: components["parameters"]["GroupID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The approval group. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalGroup"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    deleteApprovalGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: components["parameters"]["GroupID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The approval group is removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateApprovalGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: components["parameters"]["GroupID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/merge-patch+json": components["schemas"]["ApprovalGroupPatch"];
+            };
+        };
+        responses: {
+            /** @description The changed approval group. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalGroup"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listApprovals: {
+        parameters: {
+            query?: {
+                /** @description Only the approvals in this state. */
+                status?: components["parameters"]["ApprovalStateFilter"];
+                /** @description The number of items in the page, from 1 to 100. */
+                limit?: components["parameters"]["Limit"];
+                /** @description The identifier of the last item of the previous page. */
+                starting_after?: components["parameters"]["StartingAfter"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of approvals. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalRequestList"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    answerApproval: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                approval_id: components["parameters"]["ApprovalID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApprovalAnswer"];
+            };
+        };
+        responses: {
+            /** @description The answered approval. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalRequest"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getApprovalLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The secret of the personal link, 32 random bytes in unpadded base64url. */
+                token: components["parameters"]["LinkToken"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The page of the approval. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description The link is unknown. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+        };
+    };
+    answerApprovalLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The secret of the personal link, 32 random bytes in unpadded base64url. */
+                token: components["parameters"]["LinkToken"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/x-www-form-urlencoded": components["schemas"]["ApprovalLinkAnswer"];
+            };
+        };
+        responses: {
+            /** @description The page that shows the state of the approval after the answer. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description The form does not carry approve or deny. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description The link is unknown. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+        };
+    };
+    exportAuditRecords: {
+        parameters: {
+            query: {
+                /** @description The start of the period, included. */
+                from: components["parameters"]["From"];
+                /** @description The end of the period, excluded. */
+                to: components["parameters"]["To"];
+                /** @description Only the actions of this agent. */
+                agent_id?: components["parameters"]["AgentFilter"];
+                /** @description json for a JSON array of records, csv for a CSV file with one line per action. */
+                format?: components["parameters"]["AuditFormat"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The audit records of the period, a JSON array or a CSV file with one line per action. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditRecord"][];
+                    "text/csv": string;
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    getAuditRecord: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                action_id: components["parameters"]["ActionID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The audit record of the action. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditRecord"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["Unavailable"];
         };
     };
 }
