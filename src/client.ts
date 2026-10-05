@@ -67,11 +67,18 @@ const SLOW_DOWN_SECONDS = 5;
 const WAIT_GRACE_SECONDS = 60;
 const FORGOTTEN_REQUEST_MS = 10 * 60 * 1000;
 const CAPTURED = Symbol.for("paidwen.mcp");
+const HTTP_CAPTURED = Symbol.for("paidwen.http");
+const processState = globalThis as unknown as Record<symbol, true | undefined>;
 
 type Polled =
   | { kind: "status"; status: ApprovalStatus }
   | { kind: "slow_down" }
   | { kind: "unavailable" };
+
+function decidedAt(decision: Decision): number {
+  const at = Date.parse(decision.decided_at);
+  return Number.isNaN(at) ? Date.now() : at;
+}
 
 function quiet<T>(fn: () => T): T {
   return silently(() => context.with(suppressTracing(context.active()), fn));
@@ -86,7 +93,7 @@ export class Paidwen {
   readonly #onWait: ((wait: Wait) => void | Promise<void>) | undefined;
   readonly #fetch: typeof fetch;
   readonly #journal: Journal;
-  #interceptor: HttpRequestInterceptor | undefined;
+  #releaseHttp: (() => void) | undefined;
 
   constructor(options: PaidwenOptions = {}) {
     const apiKey = options.apiKey ?? environment("PAIDWEN_API_KEY");
@@ -175,19 +182,21 @@ export class Paidwen {
     return body as Decision;
   }
 
-  async waitForApproval(decision: Decision): Promise<ApprovalStatus> {
+  waitForApproval(decision: Decision): Promise<ApprovalStatus> {
+    return this.#wait(decision, async () => undefined);
+  }
+
+  async #wait(decision: Decision, pending: () => Promise<void>): Promise<ApprovalStatus> {
     const approval = decision.approval;
     if (!approval) {
       throw new PaidwenError("The decision carries no approval to wait for.");
     }
-    const decidedAt = Date.parse(decision.decided_at);
-    const deadline =
-      (Number.isNaN(decidedAt) ? Date.now() : decidedAt) +
-      (approval.expires_in + WAIT_GRACE_SECONDS) * 1000;
+    const deadline = decidedAt(decision) + (approval.expires_in + WAIT_GRACE_SECONDS) * 1000;
     let interval = approval.interval;
     let last: ApprovalStatus | undefined;
+    let first = true;
     for (;;) {
-      await delay(interval * 1000, undefined, { ref: true });
+      if (!first) await delay(interval * 1000, undefined, { ref: true });
       const polled = await this.#poll(approval.id);
       if (polled.kind === "status") {
         last = polled.status;
@@ -205,6 +214,10 @@ export class Paidwen {
           interval,
           on_expiry: last?.on_expiry ?? approval.on_expiry ?? "deny",
         };
+      }
+      if (first) {
+        first = false;
+        await pending();
       }
     }
   }
@@ -251,21 +264,22 @@ export class Paidwen {
       case "quarantine":
         throw new DeniedError(decision);
     }
-    if (this.#onPending === "throw" || !decision.approval) {
+    const approval = decision.approval;
+    if (!approval) {
       throw new PendingError(decision);
     }
-    const approval = decision.approval;
-    const decidedAt = Date.parse(decision.decided_at);
-    await this.#onWait?.({
-      decision,
-      approvalId: approval.id,
-      expiresAt: new Date(
-        (Number.isNaN(decidedAt) ? Date.now() : decidedAt) + approval.expires_in * 1000,
-      ),
-      interval: approval.interval,
-      onExpiry: approval.on_expiry ?? "deny",
+    const status = await this.#wait(decision, async () => {
+      if (this.#onPending === "throw") {
+        throw new PendingError(decision);
+      }
+      await this.#onWait?.({
+        decision,
+        approvalId: approval.id,
+        expiresAt: new Date(decidedAt(decision) + approval.expires_in * 1000),
+        interval: approval.interval,
+        onExpiry: approval.on_expiry ?? "deny",
+      });
     });
-    const status = await this.waitForApproval(decision);
     if (
       status.status === "approved" ||
       (status.status === "expired" && status.on_expiry === "allow")
@@ -337,7 +351,7 @@ export class Paidwen {
   }
 
   http(options: HttpOptions = {}): () => void {
-    if (this.#interceptor) {
+    if (processState[HTTP_CAPTURED]) {
       throw new PaidwenError("The HTTP calls of this process are already captured by Paidwen.");
     }
     const ignore = options.ignore ?? [];
@@ -384,11 +398,15 @@ export class Paidwen {
       finish(entry.span, response.status >= 400 ? new HttpStatusError(response.status) : undefined);
     });
     interceptor.apply();
-    this.#interceptor = interceptor;
-    return () => {
+    processState[HTTP_CAPTURED] = true;
+    const release = () => {
+      if (this.#releaseHttp !== release) return;
       interceptor.dispose();
-      if (this.#interceptor === interceptor) this.#interceptor = undefined;
+      this.#releaseHttp = undefined;
+      delete processState[HTTP_CAPTURED];
     };
+    this.#releaseHttp = release;
+    return release;
   }
 
   spanProcessor(): SpanProcessor {
@@ -400,8 +418,7 @@ export class Paidwen {
   }
 
   async shutdown(): Promise<void> {
-    this.#interceptor?.dispose();
-    this.#interceptor = undefined;
+    this.#releaseHttp?.();
     await this.#journal.shutdown();
   }
 

@@ -35,7 +35,7 @@ describe("a wrapped function that waits for a human answer", () => {
     );
     const started = Date.now();
     assert.equal(await refund({ amount: 2500 }), 1);
-    assert.ok(Date.now() - started >= 2000, "the SDK waits the interval before each poll");
+    assert.ok(Date.now() - started >= 1000, "the SDK polls at once, then after each interval");
     assert.equal(waits.length, 1);
     assert.equal(waits[0]?.approvalId, "0d9e8f7a-6b5c-4d3e-8f2a-1b0c9d8e7f6a");
     assert.equal(waits[0]?.interval, 1);
@@ -74,7 +74,7 @@ describe("a wrapped function that waits for a human answer", () => {
     await client().tool("payments.refund", async () => undefined)({});
     const gap = (fake.polls[1]?.at ?? 0) - (fake.polls[0]?.at ?? 0);
     assert.ok(gap >= 6000 && gap < 8000, `the second poll came ${gap} ms after the first`);
-    assert.ok(Date.now() - started >= 7000);
+    assert.ok(Date.now() - started >= 6000);
   });
 
   it("keeps polling when Paidwen is briefly unavailable", async () => {
@@ -92,7 +92,16 @@ describe("a wrapped function that waits for a human answer", () => {
       return true;
     });
     assert.equal(runs, 0);
-    assert.equal(fake.polls.length, 0);
+    assert.equal(fake.polls.length, 1);
+  });
+
+  it("runs at once with onPending throw when the answer is already there", async () => {
+    fake.script = [status("approved")];
+    const started = Date.now();
+    const refund = client({ onPending: "throw" }).tool("payments.refund", async () => "ran");
+    assert.equal(await refund({}), "ran");
+    assert.ok(Date.now() - started < 1000);
+    assert.equal(fake.polls.length, 1);
   });
 
   it("resumes the same action with the same identifier", async () => {

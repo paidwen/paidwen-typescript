@@ -199,8 +199,10 @@ describe("the HTTP capture", () => {
     );
   });
 
-  it("refuses a second capture", () => {
+  it("refuses a second capture in the same process", () => {
     const paidwen = capture();
     assert.throws(() => paidwen.http(), /already captured/);
+    const other = new Paidwen({ apiKey: "pw_test_key", baseUrl: fake.url, journal: false });
+    assert.throws(() => other.http(), /already captured/);
   });
 });
