@@ -63,11 +63,11 @@ paidwen.mcp(Client);
 const release = paidwen.http({ ignore: ["*.internal.example.com"] });
 ```
 
-`paidwen.http()` asks Paidwen before each outgoing HTTP call of the process: `fetch`, the `http` and `https` modules, undici, and the clients built on them, such as Axios or the SDKs of the providers. The tool name is the method and the path, for example `POST /v1/refunds`, and the server is the host. The parameters carry `method`, `url`, `query`, and `body` when the body is JSON or a form of at most 64 KiB. The SDK never sends the headers, and replaces the value of each sensitive key, such as `password`, `token` or `api_key`, by `REDACTED`.
+`paidwen.http()` asks Paidwen before each outgoing HTTP call of the process that goes through `fetch`, `http.request`, `http.get`, `https.request` or `https.get`, as Axios, got and the SDKs of the providers do. The tool name is the method and the path, for example `POST /v1/refunds`, and the server is the host. The parameters carry `method`, `url`, `query`, and `body` when the body is JSON or a form of at most 64 KiB. The SDK never sends the headers, and replaces the value of each sensitive key, such as `password`, `token` or `api_key`, by `REDACTED`.
 
-Call `paidwen.http()` when the process starts, before its first HTTP call: a connection opened before the capture is not captured, and the calls that reuse it ask nothing.
+Call `paidwen.http()` when the process starts, before it loads the libraries that make HTTP calls, as you would register an OpenTelemetry instrumentation. A library that keeps its own copy of `http.request` from before the capture is not captured, and neither is undici called directly.
 
-A refused call never leaves the process. A refused `fetch` rejects with a `TypeError` whose `cause` is the `DeniedError`, as `fetch` reports every network error. A refused `http.request` emits the `DeniedError` as its `error` event. The SDK asks nothing for its own calls, for the calls made inside an action already decided, and for the hosts that match `ignore`. A process has one HTTP capture. `http()` returns a function that removes it.
+A refused call never leaves the process. A refused `fetch` rejects with `DeniedError`. A refused `http.request` emits `DeniedError` as its `error` event, as for a failed connection. The SDK asks nothing for its own calls, for the calls made inside an action already decided, and for the hosts that match `ignore`. A process has one HTTP capture. `http()` returns a function that removes it.
 
 ## Journal
 
