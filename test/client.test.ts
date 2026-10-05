@@ -5,8 +5,8 @@ import {
   type Decision,
   DeniedError,
   Paidwen,
-  type PaidwenOptions,
   PaidwenError,
+  type PaidwenOptions,
   PendingError,
   RequestError,
   type Verdict,
@@ -240,7 +240,10 @@ describe("the constructor", () => {
       tool: { name: "x", kind: "function" },
     });
     assert.equal(calls[0]?.url, "https://api.paidwen.com/v1/decisions");
-    assert.equal(new Headers(calls[0]?.init.headers).get("authorization"), "Bearer pw_test_from_env");
+    assert.equal(
+      new Headers(calls[0]?.init.headers).get("authorization"),
+      "Bearer pw_test_from_env",
+    );
   });
 
   it("checks its options", () => {

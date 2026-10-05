@@ -45,7 +45,10 @@ export class Paidwen {
   }
 
   async decide(input: DecisionInput): Promise<Decision> {
-    const request: DecisionRequest = { ...input, action_id: input.action_id ?? crypto.randomUUID() };
+    const request: DecisionRequest = {
+      ...input,
+      action_id: input.action_id ?? crypto.randomUUID(),
+    };
     let response: Response;
     try {
       response = await this.#fetch(this.#endpoint, {
