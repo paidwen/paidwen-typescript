@@ -79,25 +79,15 @@ function entries(pairs: Iterable<[string, string]>): Record<string, unknown> {
   return collected;
 }
 
-async function bodyOf(request: Request): Promise<unknown> {
-  if (request.body === null || request.method === "GET" || request.method === "HEAD")
-    return undefined;
-  const declared = Number(request.headers.get("content-length"));
-  if (!Number.isFinite(declared) || declared <= 0 || declared > MAX_BODY_BYTES) return undefined;
-  const type =
-    (request.headers.get("content-type") ?? "").split(";")[0]?.trim().toLowerCase() ?? "";
-  if (
-    type !== "application/json" &&
-    !type.endsWith("+json") &&
-    type !== "application/x-www-form-urlencoded"
-  ) {
+export function bodyOf(text: string | undefined, contentType: string | null): unknown {
+  if (text === undefined || text.length === 0 || Buffer.byteLength(text) > MAX_BODY_BYTES) {
     return undefined;
   }
-  const text = await request.clone().text();
-  if (text.length > MAX_BODY_BYTES) return undefined;
+  const type = (contentType ?? "").split(";")[0]?.trim().toLowerCase() ?? "";
   if (type === "application/x-www-form-urlencoded") {
     return entries(new URLSearchParams(text));
   }
+  if (type !== "application/json" && !type.endsWith("+json")) return undefined;
   try {
     return JSON.parse(text);
   } catch {
@@ -110,17 +100,16 @@ export interface HttpCall {
   params: Record<string, unknown>;
 }
 
-export async function describe(request: Request): Promise<HttpCall> {
-  const url = new URL(request.url);
+export function describe(method: string, address: URL, body?: unknown): HttpCall {
+  const name = method.toUpperCase();
   const params: Record<string, unknown> = {
-    method: request.method,
-    url: `${url.protocol}//${url.host}${url.pathname}`,
-    query: redact(entries(url.searchParams)),
+    method: name,
+    url: `${address.protocol}//${address.host}${address.pathname}`,
+    query: redact(entries(address.searchParams)),
   };
-  const body = await bodyOf(request);
   if (body !== undefined) params.body = redact(body);
   return {
-    tool: { name: `${request.method} ${url.pathname}`, kind: "http", server: url.host },
+    tool: { name: `${name} ${address.pathname}`, kind: "http", server: address.host },
     params,
   };
 }

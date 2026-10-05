@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { createServer, request as httpRequest, type Server } from "node:http";
+import { createServer, get as httpGet, request as httpRequest, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { after, afterEach, before, beforeEach, describe, it } from "node:test";
 import { DeniedError, Paidwen } from "../src/index.ts";
@@ -94,12 +94,54 @@ describe("the HTTP capture", () => {
   it("never sends a refused fetch", async () => {
     fake.answer = (request) => decision(request, "block", { rule_id: "no-refunds" });
     capture();
-    await assert.rejects(fetch(`${apiUrl}/v1/refunds`, { method: "POST" }), (error: unknown) => {
-      assert.ok(error instanceof TypeError);
-      assert.ok(error.cause instanceof DeniedError);
-      return true;
-    });
+    await assert.rejects(fetch(`${apiUrl}/v1/refunds`, { method: "POST" }), DeniedError);
     assert.equal(received.length, 0);
+  });
+
+  it("reads the body that an http.request writes, and captures http.get", async () => {
+    capture();
+    const status = await new Promise<number>((resolve, reject) => {
+      const outgoing = httpRequest(
+        `${apiUrl}/v1/refunds?expand=charge`,
+        { method: "POST", headers: { "content-type": "application/json" } },
+        (response) => {
+          response.resume();
+          resolve(response.statusCode ?? 0);
+        },
+      );
+      outgoing.on("error", reject);
+      outgoing.write('{"amount":2500,');
+      outgoing.end('"api_key":"sk_live_secret"}');
+    });
+    assert.equal(status, 200);
+    const fetched = await new Promise<number>((resolve, reject) => {
+      httpGet(`${apiUrl}/v1/customers/42`, (response) => {
+        response.resume();
+        resolve(response.statusCode ?? 0);
+      }).on("error", reject);
+    });
+    assert.equal(fetched, 200);
+    const [posted, got] = fake.decisions.map(
+      (recorded) => recorded.body as { tool: { name: string }; params: Record<string, unknown> },
+    );
+    assert.equal(posted?.tool.name, "POST /v1/refunds");
+    assert.deepEqual(posted?.params.query, { expand: "charge" });
+    assert.deepEqual(posted?.params.body, { amount: 2500, api_key: "REDACTED" });
+    assert.equal(got?.tool.name, "GET /v1/customers/42");
+    assert.deepEqual(
+      received.map((call) => call.body),
+      ['{"amount":2500,"api_key":"sk_live_secret"}', ""],
+    );
+  });
+
+  it("asks for a call that reuses a connection opened before the capture", async () => {
+    await (await fetch(`${apiUrl}/v1/before`)).arrayBuffer();
+    capture();
+    await (await fetch(`${apiUrl}/v1/after`)).arrayBuffer();
+    assert.deepEqual(
+      fake.decisions.map((recorded) => (recorded.body as { tool: { name: string } }).tool.name),
+      ["GET /v1/after"],
+    );
   });
 
   it("asks before an http.request and fails it with the error of the SDK", async () => {

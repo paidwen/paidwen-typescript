@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
-import { HttpRequestInterceptor } from "@mswjs/interceptors/http";
 import { context, type Span } from "@opentelemetry/api";
 import { isTracingSuppressed, suppressTracing } from "@opentelemetry/core";
 import type { SpanProcessor } from "@opentelemetry/sdk-trace-base";
+import { install } from "./capture.ts";
 import {
   type ContextOptions,
   insideAction,
@@ -13,7 +13,7 @@ import {
   withContext,
 } from "./context.ts";
 import { DeniedError, PaidwenError, PendingError, RequestError } from "./errors.ts";
-import { describe, matches } from "./http.ts";
+import { matches } from "./http.ts";
 import { finish, Journal, started, traceparent } from "./journal.ts";
 import type {
   ActionContext,
@@ -70,7 +70,6 @@ const DEFAULT_BASE_URL = "https://api.paidwen.com";
 const DEFAULT_TIMEOUT_MS = 3000;
 const SLOW_DOWN_SECONDS = 5;
 const WAIT_GRACE_SECONDS = 60;
-const FORGOTTEN_REQUEST_MS = 10 * 60 * 1000;
 const CAPTURED = Symbol.for("paidwen.mcp");
 const HTTP_CAPTURED = Symbol.for("paidwen.http");
 const processState = globalThis as unknown as Record<symbol, true | undefined>;
@@ -365,53 +364,42 @@ export class Paidwen {
       throw new PaidwenError("The HTTP calls of this process are already captured by Paidwen.");
     }
     const ignore = options.ignore ?? [];
-    const interceptor = new HttpRequestInterceptor();
-    const open = new Map<string, { span: Span; at: number }>();
-    interceptor.on("request", async ({ request, requestId, controller }) => {
-      const current = scope();
-      if (current.silenced || current.inAction || isTracingSuppressed(context.active())) return;
-      const now = Date.now();
-      for (const [id, entry] of open) {
-        if (now - entry.at > FORGOTTEN_REQUEST_MS) {
-          open.delete(id);
-          finish(entry.span, new PaidwenError("The HTTP call never received a response."));
+    const ended = new WeakSet<Span>();
+    const close = (span: Span, error?: unknown) => {
+      if (ended.has(span)) return;
+      ended.add(span);
+      finish(span, error);
+    };
+    const restore = install({
+      skips: (host) => {
+        const current = scope();
+        if (current.silenced || current.inAction || isTracingSuppressed(context.active())) {
+          return true;
         }
-      }
-      let span: Span | undefined;
-      try {
-        const host = new URL(request.url).host;
-        if (ignore.some((pattern) => matches(pattern, host))) return;
-        const call = await describe(request);
-        span = this.#journal.startTool(call.tool.name, toolAttributes(call));
-        await this.#authorize(call, span);
+        return host !== undefined && ignore.some((pattern) => matches(pattern, host));
+      },
+      begin: async (call) => {
+        const span = this.#journal.startTool(call.tool.name, toolAttributes(call));
+        try {
+          await this.#authorize(call, span);
+        } catch (error) {
+          close(span, error);
+          throw error;
+        }
         started(span);
-        open.set(requestId, { span, at: Date.now() });
-      } catch (error) {
-        if (span) finish(span, error);
-        if (error instanceof PaidwenError) {
-          controller.errorWith(error);
-          return;
-        }
-        console.warn(
-          `Paidwen could not read an HTTP call, so the SDK applies onUnavailable: ${error}`,
-        );
-        if (this.#onUnavailable === "block") {
-          controller.errorWith(error instanceof Error ? error : new PaidwenError(String(error)));
-        }
-      }
+        return span;
+      },
+      inside: (fn) => insideAction(fn),
+      answered: (span, status) => {
+        span.setAttribute("http.response.status_code", status);
+        close(span, status >= 400 ? new HttpStatusError(status) : undefined);
+      },
+      failed: (span, error) => close(span, error),
     });
-    interceptor.on("response", ({ response, requestId }) => {
-      const entry = open.get(requestId);
-      if (!entry) return;
-      open.delete(requestId);
-      entry.span.setAttribute("http.response.status_code", response.status);
-      finish(entry.span, response.status >= 400 ? new HttpStatusError(response.status) : undefined);
-    });
-    interceptor.apply();
     processState[HTTP_CAPTURED] = true;
     const release = () => {
       if (this.#releaseHttp !== release) return;
-      interceptor.dispose();
+      restore();
       this.#releaseHttp = undefined;
       delete processState[HTTP_CAPTURED];
     };
