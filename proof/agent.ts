@@ -82,7 +82,14 @@ async function loop(parallel: number): Promise<void> {
   await paidwen.shutdown();
 }
 
-async function httpCalls(target: string, calls: number, warmup: number): Promise<void> {
+async function httpCalls(
+  target: string,
+  calls: number,
+  warmup: number,
+  captured: boolean,
+): Promise<void> {
+  const paidwen = captured ? new Paidwen() : undefined;
+  const release = paidwen?.http();
   const body = JSON.stringify({ amount: 2500, currency: "usd", order: "ord_4821" });
   const series = async (count: number) => {
     const durations: number[] = [];
@@ -99,23 +106,21 @@ async function httpCalls(target: string, calls: number, warmup: number): Promise
     return durations;
   };
   await series(warmup);
-  const plain = await series(calls);
-  const paidwen = new Paidwen();
-  const release = paidwen.http();
-  await series(warmup);
-  const captured = await series(calls);
-  release();
-  await paidwen.shutdown();
-  emit({ event: "measured", plain, captured });
+  const durations = await series(calls);
+  release?.();
+  await paidwen?.shutdown();
+  emit({ event: "measured", durations });
 }
 
-const [mode, argument, extra] = process.argv.slice(2);
+const [mode, argument, extra, variant] = process.argv.slice(2);
 if (mode === "refund") {
   await refund();
 } else if (mode === "loop") {
   await loop(Number(argument ?? "1"));
 } else if (mode === "http" && argument) {
-  await httpCalls(argument, Number(extra ?? "1000"), 100);
+  await httpCalls(argument, Number(extra ?? "1000"), 100, variant === "captured");
 } else {
-  throw new Error("usage: node proof/agent.ts refund | loop [parallel] | http <url> [calls]");
+  throw new Error(
+    "usage: node proof/agent.ts refund | loop [parallel] | http <url> [calls] [plain|captured]",
+  );
 }
