@@ -32,13 +32,169 @@ export interface paths {
         put?: never;
         /**
          * Ask whether an agent may perform an action.
-         * @description The agent is identified by its key. The service evaluates the rules of the agent's organization and answers with one of five verdicts. When several active rules answer, the most strict verdict wins. Rules in observation answer in the observed list and never change the verdict. Without any active rule that answers, the verdict is allow.
+         * @description The agent is identified by its key. The service evaluates the permissions of the agent, then the rules of its organization, and answers with one of five verdicts. When the permissions refuse the action, they count as block. The most strict verdict wins. Rules in observation answer in the observed list and never change the verdict. Without any permission targeting the agent and without any active rule that answers, the verdict is allow. Sending the same action identifier again within 24 hours returns the same decision.
          */
         post: operations["createDecision"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/v1/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the agents of the organization, in the order of their creation. */
+        get: operations["listAgents"];
+        put?: never;
+        /** Declare an agent. */
+        post: operations["createAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agents/{agent_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: components["parameters"]["AgentID"];
+            };
+            cookie?: never;
+        };
+        /** Read an agent. */
+        get: operations["getAgent"];
+        put?: never;
+        post?: never;
+        /** Remove an agent with its keys and its permissions. */
+        delete: operations["deleteAgent"];
+        options?: never;
+        head?: never;
+        /**
+         * Change an agent, following JSON Merge Patch.
+         * @description An absent field does not change. A field set to null is removed. The environment of an agent never changes.
+         */
+        patch: operations["updateAgent"];
+        trace?: never;
+    };
+    "/v1/agents/{agent_id}/keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: components["parameters"]["AgentID"];
+            };
+            cookie?: never;
+        };
+        /** List the active and revoked keys of an agent, in the order of their creation. */
+        get: operations["listAgentKeys"];
+        put?: never;
+        /**
+         * Give the agent a new key.
+         * @description The response carries the key once, in secret. An agent holds at most two active keys, so that it changes its key without downtime: create the new key, deploy it, then revoke the old one.
+         */
+        post: operations["createAgentKey"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agents/{agent_id}/keys/{key_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: components["parameters"]["AgentID"];
+                key_id: components["parameters"]["KeyID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke a key of the agent.
+         * @description The key stops working within one second. Revoking a revoked key succeeds again.
+         */
+        delete: operations["revokeAgentKey"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agents/{agent_id}/permissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: components["parameters"]["AgentID"];
+            };
+            cookie?: never;
+        };
+        /** Read what the agent may do and may not do. */
+        get: operations["getAgentPermissions"];
+        /**
+         * Replace both lists of permissions of the agent.
+         * @description As soon as one entry targets the agent, the agent is closed: an action passes only when an allow entry matches it and no deny entry matches it. Two empty lists remove every permission and open the agent again.
+         */
+        put: operations["replaceAgentPermissions"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the rules of the organization, in the order of the organization. */
+        get: operations["listRules"];
+        put?: never;
+        /**
+         * Write a rule.
+         * @description The condition must compile and return a boolean, or the rule is refused.
+         */
+        post: operations["createRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rules/{rule_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rule_id: components["parameters"]["RuleID"];
+            };
+            cookie?: never;
+        };
+        /** Read a rule. */
+        get: operations["getRule"];
+        put?: never;
+        post?: never;
+        /** Remove a rule. */
+        delete: operations["deleteRule"];
+        options?: never;
+        head?: never;
+        /**
+         * Change a rule, following JSON Merge Patch.
+         * @description Setting mode to observe or active switches the rule, in both directions.
+         */
+        patch: operations["updateRule"];
         trace?: never;
     };
 }
@@ -119,14 +275,21 @@ export interface components {
              */
             interval: number;
         };
+        /** @description How the permissions of the agent answered. When allowed is false, the permissions count as block. The tool and server patterns name the entry that decided; they are absent when no entry lists the tool. */
+        PermissionOutcome: {
+            allowed: boolean;
+            tool?: string;
+            server?: string;
+        };
         Decision: {
             /** Format: uuid */
             action_id: string;
             verdict: components["schemas"]["Verdict"];
-            /** @description The active rule that decided, or null when no active rule answered. */
+            /** @description The active rule that decided, or null when no active rule decided. */
             rule_id: string | null;
             /** @description The rules in observation that answered. They never change the verdict. */
             observed: components["schemas"]["ObservedRule"][];
+            permission?: components["schemas"]["PermissionOutcome"];
             approval?: components["schemas"]["Approval"];
             /** Format: date-time */
             decided_at: string;
@@ -145,9 +308,13 @@ export interface components {
         Environment: "production" | "test";
         /** @enum {string} */
         RiskLevel: "low" | "medium" | "high" | "critical";
+        Labels: {
+            [key: string]: string;
+        };
         Agent: {
+            /** Format: uuid */
             id: string;
-            /** @description The identity of the agent, for example agent-support-prod. */
+            /** @description The identity of the agent, unique in the organization, for example agent-support-prod. */
             name: string;
             owner?: string;
             team?: string;
@@ -155,9 +322,79 @@ export interface components {
             model_provider?: string;
             environment: components["schemas"]["Environment"];
             risk_level?: components["schemas"]["RiskLevel"];
+            labels: components["schemas"]["Labels"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        AgentCreate: {
+            name: string;
+            owner?: string;
+            team?: string;
+            description?: string;
+            model_provider?: string;
+            environment: components["schemas"]["Environment"];
+            risk_level?: components["schemas"]["RiskLevel"];
+            labels?: components["schemas"]["Labels"];
+        };
+        AgentPatch: {
+            name?: string;
+            owner?: string | null;
+            team?: string | null;
+            description?: string | null;
+            model_provider?: string | null;
+            /** @enum {string|null} */
+            risk_level?: "low" | "medium" | "high" | "critical" | null;
+            /** @description The labels to set. A label set to null is removed. Null in place of the object removes every label. */
             labels?: {
-                [key: string]: string;
-            };
+                [key: string]: string | null;
+            } | null;
+        };
+        AgentList: {
+            data: components["schemas"]["Agent"][];
+            has_more: boolean;
+        };
+        AgentKey: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            agent_id: string;
+            /** @description The prefix and the last four characters of the key, for example pw_live_...k3Fz. */
+            redacted: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            revoked_at: string | null;
+        };
+        CreatedAgentKey: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            agent_id: string;
+            redacted: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            revoked_at: string | null;
+            /** @description The key itself, shown only in this response. */
+            secret: string;
+        };
+        AgentKeyList: {
+            data: components["schemas"]["AgentKey"][];
+            has_more: boolean;
+        };
+        PermissionEntry: {
+            /** @description The pattern of the tool name. An asterisk stands for any sequence of characters. */
+            tool: string;
+            /** @description The pattern of the server. Without it, the entry matches every server. */
+            server?: string;
+        };
+        AgentPermissions: {
+            /** @description What the agent may do. */
+            allow: components["schemas"]["PermissionEntry"][];
+            /** @description What the agent may not do. A deny entry always wins over an allow entry. */
+            deny: components["schemas"]["PermissionEntry"][];
         };
         /**
          * @description An active rule applies its verdict. A rule in observation only reports the verdict it would have given.
@@ -165,42 +402,84 @@ export interface components {
          */
         RuleMode: "active" | "observe";
         Rule: {
+            /** Format: uuid */
             id: string;
             name?: string;
             /** @description A CEL expression that returns a boolean. It reads five variables: agent, tool, params, cost and now. */
             condition: string;
             verdict: components["schemas"]["Verdict"];
             mode: components["schemas"]["RuleMode"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
         };
-        AgentKeyDigest: {
-            agent_id: string;
-            /** @description The SHA-256 digest of the key, in hexadecimal. */
-            sha256: string;
+        RuleCreate: {
+            name?: string;
+            condition: string;
+            verdict: components["schemas"]["Verdict"];
+            mode: components["schemas"]["RuleMode"];
         };
-        SnapshotOrganization: {
+        RulePatch: {
+            name?: string | null;
+            condition?: string;
+            verdict?: components["schemas"]["Verdict"];
+            mode?: components["schemas"]["RuleMode"];
+        };
+        RuleList: {
+            data: components["schemas"]["Rule"][];
+            has_more: boolean;
+        };
+        SnapshotAgent: {
             id: string;
-            agents: components["schemas"]["Agent"][];
-            keys: components["schemas"]["AgentKeyDigest"][];
-            rules: components["schemas"]["Rule"][];
+            name: string;
+            owner?: string;
+            team?: string;
+            environment: components["schemas"]["Environment"];
+            risk_level?: components["schemas"]["RiskLevel"];
+            labels?: components["schemas"]["Labels"];
+            /** @description The SHA-256 digests of the active keys of the agent, in hexadecimal. */
+            key_digests: string[];
+            permissions?: components["schemas"]["AgentPermissions"];
         };
-        /** @description Everything the decision point needs to answer, held in memory: the organizations, their agents with the digests of their keys, and their rules. */
+        SnapshotRule: {
+            id: string;
+            condition: string;
+            verdict: components["schemas"]["Verdict"];
+            mode: components["schemas"]["RuleMode"];
+        };
+        /** @description Everything the decision point needs to answer for one organization, held in memory: its revision, its agents with the digests of their active keys and their permissions, and its rules in the order of the organization. */
         Snapshot: {
-            revision: string;
-            organizations: components["schemas"]["SnapshotOrganization"][];
+            organization_id: string;
+            /** Format: int64 */
+            revision: number;
+            agents: components["schemas"]["SnapshotAgent"][];
+            rules: components["schemas"]["SnapshotRule"][];
+        };
+        /** @description A rule of a conformance case. Its identifier is local to the case. */
+        ConformanceRule: {
+            id: string;
+            name?: string;
+            condition: string;
+            verdict: components["schemas"]["Verdict"];
+            mode: components["schemas"]["RuleMode"];
         };
         ConformanceExpectation: {
             verdict: components["schemas"]["Verdict"];
+            /** @description The local identifier of the rule that decided. */
             rule_id: string | null;
             observed: components["schemas"]["ObservedRule"][];
             /** @description True when the decision carries an approval to wait for. */
             awaits_approval: boolean;
+            permission?: components["schemas"]["PermissionOutcome"];
         };
-        /** @description One example of the conformance suite: an agent, the rules of its organization, a request and the expected decision. The server and both SDKs must pass every case. */
+        /** @description One example of the conformance suite: an agent, its permissions, the rules of its organization, a request and the expected decision. The server and both SDKs must pass every case. */
         ConformanceCase: {
             name: string;
             description: string;
-            agent: components["schemas"]["Agent"];
-            rules: components["schemas"]["Rule"][];
+            agent: components["schemas"]["AgentCreate"];
+            permissions?: components["schemas"]["AgentPermissions"];
+            rules: components["schemas"]["ConformanceRule"][];
             request: components["schemas"]["DecisionRequest"];
             expected: components["schemas"]["ConformanceExpectation"];
         };
@@ -215,7 +494,7 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description The agent key is missing, malformed or unknown. */
+        /** @description The key is missing, malformed or unknown, or it opens another door. */
         Unauthorized: {
             headers: {
                 /** @description The authentication scheme, Bearer. */
@@ -226,8 +505,35 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
+        /** @description The resource does not exist in the organization. */
+        NotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description The request conflicts with the state of the organization. */
+        Conflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
         /** @description The request body is larger than the service accepts. */
         PayloadTooLarge: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description The action identifier was already used for another request. */
+        ActionReused: {
             headers: {
                 [name: string]: unknown;
             };
@@ -244,8 +550,25 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
+        /** @description The service is starting or cannot answer yet. */
+        Unavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
     };
-    parameters: never;
+    parameters: {
+        /** @description The number of items in the page, from 1 to 100. */
+        Limit: number;
+        /** @description The identifier of the last item of the previous page. */
+        StartingAfter: string;
+        AgentID: string;
+        KeyID: string;
+        RuleID: string;
+    };
     requestBodies: never;
     headers: never;
     pathItems: never;
@@ -270,6 +593,7 @@ export interface operations {
                     "application/json": components["schemas"]["Health"];
                 };
             };
+            503: components["responses"]["Unavailable"];
         };
     };
     createDecision: {
@@ -288,6 +612,8 @@ export interface operations {
             /** @description The decision for the action. */
             200: {
                 headers: {
+                    /** @description Present with the value true when the decision was given before for the same action identifier. */
+                    "Idempotent-Replayed"?: "true";
                     [name: string]: unknown;
                 };
                 content: {
@@ -296,6 +622,428 @@ export interface operations {
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthorized"];
+            413: components["responses"]["PayloadTooLarge"];
+            422: components["responses"]["ActionReused"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    listAgents: {
+        parameters: {
+            query?: {
+                /** @description The number of items in the page, from 1 to 100. */
+                limit?: components["parameters"]["Limit"];
+                /** @description The identifier of the last item of the previous page. */
+                starting_after?: components["parameters"]["StartingAfter"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of agents. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentList"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentCreate"];
+            };
+        };
+        responses: {
+            /** @description The agent is declared. */
+            201: {
+                headers: {
+                    /** @description The address of the agent. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Agent"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: components["parameters"]["AgentID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The agent. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Agent"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    deleteAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: components["parameters"]["AgentID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The agent is removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: components["parameters"]["AgentID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/merge-patch+json": components["schemas"]["AgentPatch"];
+            };
+        };
+        responses: {
+            /** @description The changed agent. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Agent"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listAgentKeys: {
+        parameters: {
+            query?: {
+                /** @description The number of items in the page, from 1 to 100. */
+                limit?: components["parameters"]["Limit"];
+                /** @description The identifier of the last item of the previous page. */
+                starting_after?: components["parameters"]["StartingAfter"];
+            };
+            header?: never;
+            path: {
+                agent_id: components["parameters"]["AgentID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of keys, without their value. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentKeyList"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createAgentKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: components["parameters"]["AgentID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The key is created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedAgentKey"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    revokeAgentKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: components["parameters"]["AgentID"];
+                key_id: components["parameters"]["KeyID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The key is revoked. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getAgentPermissions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: components["parameters"]["AgentID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The permissions of the agent. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentPermissions"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    replaceAgentPermissions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: components["parameters"]["AgentID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentPermissions"];
+            };
+        };
+        responses: {
+            /** @description The new permissions of the agent. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentPermissions"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            413: components["responses"]["PayloadTooLarge"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listRules: {
+        parameters: {
+            query?: {
+                /** @description The number of items in the page, from 1 to 100. */
+                limit?: components["parameters"]["Limit"];
+                /** @description The identifier of the last item of the previous page. */
+                starting_after?: components["parameters"]["StartingAfter"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of rules. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleList"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RuleCreate"];
+            };
+        };
+        responses: {
+            /** @description The rule is written. */
+            201: {
+                headers: {
+                    /** @description The address of the rule. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Rule"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            413: components["responses"]["PayloadTooLarge"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rule_id: components["parameters"]["RuleID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The rule. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Rule"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    deleteRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rule_id: components["parameters"]["RuleID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The rule is removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rule_id: components["parameters"]["RuleID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/merge-patch+json": components["schemas"]["RulePatch"];
+            };
+        };
+        responses: {
+            /** @description The changed rule. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Rule"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
             413: components["responses"]["PayloadTooLarge"];
             500: components["responses"]["InternalError"];
         };
