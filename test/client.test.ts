@@ -49,7 +49,11 @@ function client(transport: typeof fetch, options: PaidwenOptions = {}): Paidwen 
 
 const hanging: typeof fetch = (_url, init) =>
   new Promise((_resolve, reject) => {
-    init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+    const openConnection = setTimeout(() => undefined, 60_000);
+    init?.signal?.addEventListener("abort", () => {
+      clearTimeout(openConnection);
+      reject(init.signal?.reason);
+    });
   });
 
 describe("decide", () => {
