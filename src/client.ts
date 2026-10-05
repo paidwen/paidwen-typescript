@@ -18,6 +18,7 @@ import { finish, Journal, started, traceparent } from "./journal.ts";
 import type {
   ActionContext,
   ApprovalStatus,
+  Cost,
   Decision,
   DecisionRequest,
   OnExpiry,
@@ -51,6 +52,10 @@ export interface PaidwenOptions {
 
 export interface HttpOptions {
   ignore?: string[];
+}
+
+export interface ToolOptions<P> {
+  cost?: Cost | ((params: P) => Cost | undefined);
 }
 
 export interface McpClient {
@@ -306,9 +311,14 @@ export class Paidwen {
   tool<P extends Record<string, unknown>, R>(
     name: string,
     fn: (params: P) => R | Promise<R>,
+    options: ToolOptions<P> = {},
   ): (params: P) => Promise<R> {
-    return (params: P): Promise<R> =>
-      this.#run({ tool: { name, kind: "function" }, params }, () => fn(params));
+    return (params: P): Promise<R> => {
+      const cost = typeof options.cost === "function" ? options.cost(params) : options.cost;
+      const input: DecisionInput = { tool: { name, kind: "function" }, params };
+      if (cost !== undefined) input.cost = cost;
+      return this.#run(input, () => fn(params));
+    };
   }
 
   context<T>(options: ContextOptions, fn: () => T): T {

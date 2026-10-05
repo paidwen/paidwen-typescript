@@ -762,6 +762,12 @@ export interface components {
             id: string;
             name: string;
         };
+        /** @description The agent as the decision point knew it when it decided. */
+        AuditAgent: {
+            id: string;
+            name: string;
+            environment?: components["schemas"]["Environment"];
+        };
         RuleReference: {
             id: string;
             name?: string;
@@ -844,7 +850,7 @@ export interface components {
         AuditRecord: {
             /** Format: uuid */
             action_id: string;
-            agent: components["schemas"]["AgentReference"];
+            agent: components["schemas"]["AuditAgent"];
             tool: components["schemas"]["Tool"];
             params?: {
                 [key: string]: unknown;

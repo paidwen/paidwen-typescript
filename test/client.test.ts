@@ -194,6 +194,20 @@ describe("tool", () => {
     assert.deepEqual(sent.params, { order: "4821", amount: 120 });
   });
 
+  it("sends the cost that the agent estimates for the tool", async () => {
+    const calls: Call[] = [];
+    const paidwen = client(server(200, decision("allow"), calls));
+    await paidwen.tool("search.web", async () => "found", { cost: { estimated_usd: 0.001 } })({});
+    await paidwen.tool("payments.refund", async (params: { amount: number }) => params.amount, {
+      cost: (params) => ({ estimated_usd: params.amount / 1000 }),
+    })({ amount: 250 });
+    await paidwen.tool("free", async () => "ok", { cost: () => undefined })({});
+    const sent = calls.map((call) => JSON.parse(String(call.init.body)));
+    assert.deepEqual(sent[0].cost, { estimated_usd: 0.001 });
+    assert.deepEqual(sent[1].cost, { estimated_usd: 0.25 });
+    assert.equal(sent[2].cost, undefined);
+  });
+
   it("never runs the function when Paidwen denies it", async () => {
     for (const verdict of ["block", "quarantine"] as const) {
       const run = mock.fn(() => "done");

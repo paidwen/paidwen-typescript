@@ -6,6 +6,7 @@ export type {
   McpTarget,
   OnPending,
   PaidwenOptions,
+  ToolOptions,
   Wait,
 } from "./client.ts";
 export { Paidwen } from "./client.ts";
