@@ -1,9 +1,17 @@
 import { readFileSync } from "node:fs";
-import { type DecisionRequest, Paidwen } from "../src/index.ts";
+import { type DecisionRequest, type Fallback, Paidwen, RequestError } from "../src/index.ts";
+
+interface Step {
+  name: string;
+  api_key: string;
+  request: DecisionRequest;
+  timeout_ms?: number;
+  on_unavailable?: Fallback;
+}
 
 interface Plan {
   base_url: string;
-  cases: { name: string; api_key: string; request: DecisionRequest }[];
+  steps: Step[];
 }
 
 const planPath = process.argv[2];
@@ -12,8 +20,24 @@ if (!planPath) {
 }
 const plan = JSON.parse(readFileSync(planPath, "utf8")) as Plan;
 const results = [];
-for (const entry of plan.cases) {
-  const paidwen = new Paidwen({ apiKey: entry.api_key, baseUrl: plan.base_url });
-  results.push({ name: entry.name, decision: await paidwen.decide(entry.request) });
+for (const step of plan.steps) {
+  const paidwen = new Paidwen({
+    apiKey: step.api_key,
+    baseUrl: plan.base_url,
+    ...(step.timeout_ms === undefined ? {} : { timeoutMs: step.timeout_ms }),
+    ...(step.on_unavailable === undefined ? {} : { onUnavailable: step.on_unavailable }),
+  });
+  const started = performance.now();
+  try {
+    const decision = await paidwen.decide(step.request);
+    results.push({ name: step.name, decision, elapsed_ms: performance.now() - started });
+  } catch (error) {
+    if (!(error instanceof RequestError)) throw error;
+    results.push({
+      name: step.name,
+      error: { status: error.status, type: error.problem?.type ?? null },
+      elapsed_ms: performance.now() - started,
+    });
+  }
 }
 process.stdout.write(`${JSON.stringify({ results })}\n`);

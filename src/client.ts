@@ -13,8 +13,16 @@ export interface PaidwenOptions {
   fetch?: typeof fetch;
 }
 
+export interface McpClient {
+  request(request: { method: string; params?: unknown }, ...rest: never[]): unknown;
+  getServerVersion?(): { name?: unknown } | undefined;
+}
+
+export type McpTarget = McpClient | (abstract new (...args: never[]) => McpClient);
+
 const DEFAULT_BASE_URL = "https://api.paidwen.com";
 const DEFAULT_TIMEOUT_MS = 3000;
+const CAPTURED = Symbol.for("paidwen.mcp");
 
 export class Paidwen {
   readonly #apiKey: string;
@@ -92,6 +100,39 @@ export class Paidwen {
     };
   }
 
+  mcp(target: McpTarget): () => void {
+    const holder = typeof target === "function" ? target.prototype : target;
+    if (!isObject(holder) || typeof holder.request !== "function") {
+      throw new PaidwenError("mcp() takes the Client class of the MCP SDK, or one of its clients.");
+    }
+    if (CAPTURED in holder) {
+      throw new PaidwenError("This MCP client is already captured by Paidwen.");
+    }
+    const own = Object.getOwnPropertyDescriptor(holder, "request");
+    const send = holder.request as (this: McpClient, ...args: unknown[]) => unknown;
+    const ask = (input: DecisionInput) => this.decide(input);
+    async function request(this: McpClient, message: unknown, ...rest: unknown[]) {
+      if (isObject(message) && message.method === "tools/call") {
+        enforce(await ask(toolCall(this, message.params)));
+      }
+      return await send.call(this, message, ...rest);
+    }
+    Object.defineProperty(holder, "request", {
+      value: request,
+      writable: true,
+      configurable: true,
+    });
+    Object.defineProperty(holder, CAPTURED, { value: true, configurable: true });
+    return () => {
+      if (own) {
+        Object.defineProperty(holder, "request", own);
+      } else {
+        delete holder.request;
+      }
+      delete holder[CAPTURED];
+    };
+  }
+
   #fallback(request: DecisionRequest, cause: unknown): Decision {
     const reason = cause instanceof Error ? cause.message : String(cause);
     console.warn(
@@ -105,6 +146,22 @@ export class Paidwen {
       decided_at: new Date().toISOString(),
     };
   }
+}
+
+function toolCall(client: McpClient, params: unknown): DecisionInput {
+  const call = isObject(params) ? params : {};
+  const name = typeof call.name === "string" ? call.name : "";
+  const server = client.getServerVersion?.()?.name;
+  return {
+    tool: {
+      name,
+      kind: "mcp",
+      ...(typeof server === "string" && server.length >= 1 && server.length <= 256
+        ? { server }
+        : {}),
+    },
+    params: isObject(call.arguments) ? call.arguments : {},
+  };
 }
 
 function enforce(decision: Decision): void {
@@ -124,6 +181,6 @@ function environment(name: string): string | undefined {
   return typeof process === "undefined" ? undefined : process.env[name] || undefined;
 }
 
-function isObject(value: unknown): value is Record<string, unknown> {
+function isObject(value: unknown): value is Record<PropertyKey, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

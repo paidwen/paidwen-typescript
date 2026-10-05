@@ -208,6 +208,17 @@ describe("tool", () => {
     }
   });
 
+  it("says when the permissions of the agent refuse the action", async () => {
+    const refused: Decision = { ...decision("block"), permission: { allowed: false } };
+    await assert.rejects(
+      client(server(200, refused)).tool("x", () => "done")({}),
+      (error: unknown) =>
+        error instanceof DeniedError &&
+        error.message ===
+          `Paidwen answered block for action ${ACTION_ID} because the permissions of the agent do not allow it.`,
+    );
+  });
+
   it("waits when Paidwen asks for a human answer", async () => {
     for (const verdict of ["require_approval", "escalate"] as const) {
       const run = mock.fn(() => "done");

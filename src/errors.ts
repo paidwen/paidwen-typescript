@@ -37,6 +37,12 @@ export class RequestError extends PaidwenError {
 }
 
 function describe(decision: Decision): string {
-  const rule = decision.rule_id === null ? "" : ` by rule ${decision.rule_id}`;
-  return `Paidwen answered ${decision.verdict} for action ${decision.action_id}${rule}.`;
+  const answer = `Paidwen answered ${decision.verdict} for action ${decision.action_id}`;
+  if (decision.rule_id !== null) {
+    return `${answer} by rule ${decision.rule_id}.`;
+  }
+  if (decision.permission?.allowed === false) {
+    return `${answer} because the permissions of the agent do not allow it.`;
+  }
+  return `${answer}.`;
 }

@@ -8,6 +8,7 @@ export type Cost = Schemas["Cost"];
 export type Decision = Schemas["Decision"];
 export type DecisionRequest = Schemas["DecisionRequest"];
 export type ObservedRule = Schemas["ObservedRule"];
+export type PermissionOutcome = Schemas["PermissionOutcome"];
 export type Problem = Schemas["Problem"];
 export type Tool = Schemas["Tool"];
 export type ToolKind = Schemas["ToolKind"];

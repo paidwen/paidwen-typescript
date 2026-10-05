@@ -1,4 +1,4 @@
-export type { DecisionInput, Fallback, PaidwenOptions } from "./client.ts";
+export type { DecisionInput, Fallback, McpClient, McpTarget, PaidwenOptions } from "./client.ts";
 export { Paidwen } from "./client.ts";
 export { DeniedError, PaidwenError, PendingError, RequestError } from "./errors.ts";
 export type {
@@ -8,6 +8,7 @@ export type {
   Decision,
   DecisionRequest,
   ObservedRule,
+  PermissionOutcome,
   Problem,
   Tool,
   ToolKind,
