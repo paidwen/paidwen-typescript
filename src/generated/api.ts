@@ -466,6 +466,7 @@ export interface components {
              * @description Seconds to wait between two polls.
              */
             interval: number;
+            on_expiry?: components["schemas"]["OnExpiry"];
         };
         /** @description How the permissions of the agent answered. When allowed is false, the permissions count as block. The tool and server patterns name the entry that decided; they are absent when no entry lists the tool. */
         PermissionOutcome: {

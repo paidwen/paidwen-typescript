@@ -1,6 +1,6 @@
 {
   "name": "paidwen",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Paidwen SDK: the agent asks Paidwen before each action and applies the answer.",
   "license": "Apache-2.0",
   "repository": {
@@ -28,7 +28,16 @@
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "1.32.0",
+    "@opentelemetry/context-async-hooks": "2.11.0",
     "@types/node": "24.19.1",
     "typescript": "5.9.3"
+  },
+  "dependencies": {
+    "@mswjs/interceptors": "0.45.7",
+    "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/core": "2.11.0",
+    "@opentelemetry/exporter-trace-otlp-http": "0.222.0",
+    "@opentelemetry/resources": "2.11.0",
+    "@opentelemetry/sdk-trace-base": "2.11.0"
   }
 }

@@ -1,4 +1,4 @@
-import type { Decision, Problem } from "./types.ts";
+import type { ApprovalStatus, Decision, Problem } from "./types.ts";
 
 export class PaidwenError extends Error {
   override name = "PaidwenError";
@@ -7,10 +7,12 @@ export class PaidwenError extends Error {
 export class DeniedError extends PaidwenError {
   override name = "DeniedError";
   readonly decision: Decision;
+  readonly approval: ApprovalStatus | undefined;
 
-  constructor(decision: Decision) {
-    super(describe(decision));
+  constructor(decision: Decision, approval?: ApprovalStatus) {
+    super(describe(decision, approval));
     this.decision = decision;
+    this.approval = approval;
   }
 }
 
@@ -36,10 +38,19 @@ export class RequestError extends PaidwenError {
   }
 }
 
-function describe(decision: Decision): string {
+function describe(decision: Decision, approval?: ApprovalStatus): string {
   const answer = `Paidwen answered ${decision.verdict} for action ${decision.action_id}`;
+  if (approval?.status === "denied") {
+    return `${answer}, and the approver denied it.`;
+  }
+  if (approval?.status === "expired") {
+    return `${answer}, and the wait expired without an answer.`;
+  }
   if (decision.rule_id !== null) {
     return `${answer} by rule ${decision.rule_id}.`;
+  }
+  if (decision.budget) {
+    return `${answer} because the ${decision.budget.exceeded} budget of the agent is spent.`;
   }
   if (decision.permission?.allowed === false) {
     return `${answer} because the permissions of the agent do not allow it.`;

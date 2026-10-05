@@ -43,6 +43,7 @@ function client(transport: typeof fetch, options: PaidwenOptions = {}): Paidwen 
     apiKey: "pw_test_key",
     baseUrl: "https://api.example.test/",
     fetch: transport,
+    journal: false,
     ...options,
   });
 }
@@ -124,6 +125,7 @@ describe("decide", () => {
         apiKey: "pw_test_key",
         baseUrl: `http://127.0.0.1:${port}`,
         timeoutMs: 200,
+        journal: false,
       }).decide({ tool: { name: "x", kind: "function" } });
       const elapsed = Date.now() - started;
       assert.equal(result.verdict, "block");
@@ -251,7 +253,7 @@ describe("the constructor", () => {
   it("reads the agent key from the environment", async () => {
     process.env.PAIDWEN_API_KEY = "pw_test_from_env";
     const calls: Call[] = [];
-    await new Paidwen({ fetch: server(200, decision("allow"), calls) }).decide({
+    await new Paidwen({ fetch: server(200, decision("allow"), calls), journal: false }).decide({
       tool: { name: "x", kind: "function" },
     });
     assert.equal(calls[0]?.url, "https://api.paidwen.com/v1/decisions");

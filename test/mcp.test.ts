@@ -34,6 +34,7 @@ function answering(verdict: Verdict, asked: Asked[]): Paidwen {
   return new Paidwen({
     apiKey: "pw_test_key",
     baseUrl: "https://api.example.test",
+    journal: false,
     fetch: async (_url, init) => {
       const request = JSON.parse(String(init?.body));
       asked.push({ tool: request.tool, params: request.params });

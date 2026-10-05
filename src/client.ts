@@ -1,16 +1,56 @@
+import { randomUUID } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
+import { HttpRequestInterceptor } from "@mswjs/interceptors/http";
+import { context, type Span } from "@opentelemetry/api";
+import { isTracingSuppressed, suppressTracing } from "@opentelemetry/core";
+import type { SpanProcessor } from "@opentelemetry/sdk-trace-base";
+import {
+  type ContextOptions,
+  insideAction,
+  scope,
+  silently,
+  takeActionId,
+  withContext,
+} from "./context.ts";
 import { DeniedError, PaidwenError, PendingError, RequestError } from "./errors.ts";
-import type { Decision, DecisionRequest, Problem } from "./types.ts";
+import { describe, matches } from "./http.ts";
+import { finish, Journal, started, traceparent } from "./journal.ts";
+import type {
+  ActionContext,
+  ApprovalStatus,
+  Decision,
+  DecisionRequest,
+  OnExpiry,
+  Problem,
+} from "./types.ts";
 
 export type Fallback = "allow" | "block";
 
+export type OnPending = "wait" | "throw";
+
 export type DecisionInput = Omit<DecisionRequest, "action_id"> & { action_id?: string };
+
+export interface Wait {
+  decision: Decision;
+  approvalId: string;
+  expiresAt: Date;
+  interval: number;
+  onExpiry: OnExpiry;
+}
 
 export interface PaidwenOptions {
   apiKey?: string;
   baseUrl?: string;
   timeoutMs?: number;
   onUnavailable?: Fallback;
+  onPending?: OnPending;
+  onWait?: (wait: Wait) => void | Promise<void>;
+  journal?: boolean;
   fetch?: typeof fetch;
+}
+
+export interface HttpOptions {
+  ignore?: string[];
 }
 
 export interface McpClient {
@@ -20,16 +60,33 @@ export interface McpClient {
 
 export type McpTarget = McpClient | (abstract new (...args: never[]) => McpClient);
 
+const VERSION = "0.7.0";
 const DEFAULT_BASE_URL = "https://api.paidwen.com";
 const DEFAULT_TIMEOUT_MS = 3000;
+const SLOW_DOWN_SECONDS = 5;
+const WAIT_GRACE_SECONDS = 60;
+const FORGOTTEN_REQUEST_MS = 10 * 60 * 1000;
 const CAPTURED = Symbol.for("paidwen.mcp");
+
+type Polled =
+  | { kind: "status"; status: ApprovalStatus }
+  | { kind: "slow_down" }
+  | { kind: "unavailable" };
+
+function quiet<T>(fn: () => T): T {
+  return silently(() => context.with(suppressTracing(context.active()), fn));
+}
 
 export class Paidwen {
   readonly #apiKey: string;
-  readonly #endpoint: string;
+  readonly #base: string;
   readonly #timeoutMs: number;
   readonly #onUnavailable: Fallback;
+  readonly #onPending: OnPending;
+  readonly #onWait: ((wait: Wait) => void | Promise<void>) | undefined;
   readonly #fetch: typeof fetch;
+  readonly #journal: Journal;
+  #interceptor: HttpRequestInterceptor | undefined;
 
   constructor(options: PaidwenOptions = {}) {
     const apiKey = options.apiKey ?? environment("PAIDWEN_API_KEY");
@@ -40,35 +97,63 @@ export class Paidwen {
     if (onUnavailable !== "allow" && onUnavailable !== "block") {
       throw new PaidwenError('onUnavailable must be "allow" or "block".');
     }
+    const onPending = options.onPending ?? "wait";
+    if (onPending !== "wait" && onPending !== "throw") {
+      throw new PaidwenError('onPending must be "wait" or "throw".');
+    }
     const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     if (!(timeoutMs > 0)) {
       throw new PaidwenError("timeoutMs must be a positive number of milliseconds.");
     }
     const baseUrl = options.baseUrl ?? environment("PAIDWEN_BASE_URL") ?? DEFAULT_BASE_URL;
     this.#apiKey = apiKey;
-    this.#endpoint = `${baseUrl.replace(/\/+$/, "")}/v1/decisions`;
+    this.#base = baseUrl.replace(/\/+$/, "");
     this.#timeoutMs = timeoutMs;
     this.#onUnavailable = onUnavailable;
+    this.#onPending = onPending;
+    this.#onWait = options.onWait;
     this.#fetch = options.fetch ?? globalThis.fetch;
+    this.#journal = new Journal({
+      endpoint: `${this.#base}/v1/traces`,
+      apiKey,
+      enabled: options.journal ?? true,
+      version: VERSION,
+    });
   }
 
-  async decide(input: DecisionInput): Promise<Decision> {
+  decide(input: DecisionInput): Promise<Decision> {
+    return this.#ask(input);
+  }
+
+  async #ask(input: DecisionInput, span?: Span): Promise<Decision> {
+    await this.#journal.settle();
     const request: DecisionRequest = {
       ...input,
-      action_id: input.action_id ?? crypto.randomUUID(),
+      action_id: input.action_id ?? takeActionId() ?? randomUUID(),
     };
+    const known: ActionContext = {};
+    const session = scope().sessionId;
+    if (session !== undefined) known.session_id = session;
+    if (span) known.trace_id = span.spanContext().traceId;
+    if (Object.keys(known).length > 0 || input.context) {
+      request.context = { ...known, ...input.context };
+    }
+    const headers: Record<string, string> = {
+      authorization: `Bearer ${this.#apiKey}`,
+      "content-type": "application/json",
+      accept: "application/json",
+    };
+    if (span) headers.traceparent = traceparent(span);
     let response: Response;
     try {
-      response = await this.#fetch(this.#endpoint, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${this.#apiKey}`,
-          "content-type": "application/json",
-          accept: "application/json",
-        },
-        body: JSON.stringify(request),
-        signal: AbortSignal.timeout(this.#timeoutMs),
-      });
+      response = await quiet(() =>
+        this.#fetch(`${this.#base}/v1/decisions`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(request),
+          signal: AbortSignal.timeout(this.#timeoutMs),
+        }),
+      );
     } catch (cause) {
       return this.#fallback(request, cause);
     }
@@ -90,14 +175,130 @@ export class Paidwen {
     return body as Decision;
   }
 
+  async waitForApproval(decision: Decision): Promise<ApprovalStatus> {
+    const approval = decision.approval;
+    if (!approval) {
+      throw new PaidwenError("The decision carries no approval to wait for.");
+    }
+    const decidedAt = Date.parse(decision.decided_at);
+    const deadline =
+      (Number.isNaN(decidedAt) ? Date.now() : decidedAt) +
+      (approval.expires_in + WAIT_GRACE_SECONDS) * 1000;
+    let interval = approval.interval;
+    let last: ApprovalStatus | undefined;
+    for (;;) {
+      await delay(interval * 1000, undefined, { ref: true });
+      const polled = await this.#poll(approval.id);
+      if (polled.kind === "status") {
+        last = polled.status;
+        if (polled.status.status !== "pending") return polled.status;
+        interval = Math.max(interval, polled.status.interval);
+      } else if (polled.kind === "slow_down") {
+        interval += SLOW_DOWN_SECONDS;
+      }
+      if (Date.now() >= deadline) {
+        return {
+          id: approval.id,
+          action_id: decision.action_id,
+          status: "expired",
+          expires_at: new Date(deadline).toISOString(),
+          interval,
+          on_expiry: last?.on_expiry ?? approval.on_expiry ?? "deny",
+        };
+      }
+    }
+  }
+
+  async #poll(id: string): Promise<Polled> {
+    let response: Response;
+    try {
+      response = await quiet(() =>
+        this.#fetch(`${this.#base}/v1/approvals/${id}`, {
+          headers: { authorization: `Bearer ${this.#apiKey}`, accept: "application/json" },
+          signal: AbortSignal.timeout(this.#timeoutMs),
+        }),
+      );
+    } catch {
+      return { kind: "unavailable" };
+    }
+    if (response.status === 429) {
+      response.body?.cancel().catch(() => undefined);
+      return { kind: "slow_down" };
+    }
+    if (response.status >= 500) {
+      response.body?.cancel().catch(() => undefined);
+      return { kind: "unavailable" };
+    }
+    let body: unknown;
+    try {
+      body = await response.json();
+    } catch {
+      return { kind: "unavailable" };
+    }
+    if (!response.ok) {
+      throw new RequestError(response.status, isObject(body) ? (body as Problem) : undefined);
+    }
+    return { kind: "status", status: body as ApprovalStatus };
+  }
+
+  async #authorize(input: DecisionInput, span: Span): Promise<void> {
+    const decision = await this.#ask(input, span);
+    span.setAttribute("paidwen.action.id", decision.action_id);
+    switch (decision.verdict) {
+      case "allow":
+        return;
+      case "block":
+      case "quarantine":
+        throw new DeniedError(decision);
+    }
+    if (this.#onPending === "throw" || !decision.approval) {
+      throw new PendingError(decision);
+    }
+    const approval = decision.approval;
+    const decidedAt = Date.parse(decision.decided_at);
+    await this.#onWait?.({
+      decision,
+      approvalId: approval.id,
+      expiresAt: new Date(
+        (Number.isNaN(decidedAt) ? Date.now() : decidedAt) + approval.expires_in * 1000,
+      ),
+      interval: approval.interval,
+      onExpiry: approval.on_expiry ?? "deny",
+    });
+    const status = await this.waitForApproval(decision);
+    if (
+      status.status === "approved" ||
+      (status.status === "expired" && status.on_expiry === "allow")
+    ) {
+      return;
+    }
+    throw new DeniedError(decision, status);
+  }
+
+  async #run<R>(input: DecisionInput, action: () => R | Promise<R>): Promise<R> {
+    const span = this.#journal.startTool(input.tool.name, toolAttributes(input));
+    try {
+      await this.#authorize(input, span);
+      started(span);
+      const result = await insideAction(() => action());
+      finish(span);
+      return result;
+    } catch (error) {
+      finish(span, error);
+      throw error;
+    }
+  }
+
   tool<P extends Record<string, unknown>, R>(
     name: string,
     fn: (params: P) => R | Promise<R>,
   ): (params: P) => Promise<R> {
-    return async (params: P): Promise<R> => {
-      enforce(await this.decide({ tool: { name, kind: "function" }, params }));
-      return await fn(params);
-    };
+    return (params: P): Promise<R> =>
+      this.#run({ tool: { name, kind: "function" }, params }, () => fn(params));
+  }
+
+  context<T>(options: ContextOptions, fn: () => T): T {
+    return withContext(options, fn);
   }
 
   mcp(target: McpTarget): () => void {
@@ -110,10 +311,12 @@ export class Paidwen {
     }
     const own = Object.getOwnPropertyDescriptor(holder, "request");
     const send = holder.request as (this: McpClient, ...args: unknown[]) => unknown;
-    const ask = (input: DecisionInput) => this.decide(input);
+    const run = <R>(input: DecisionInput, action: () => Promise<R>) => this.#run(input, action);
     async function request(this: McpClient, message: unknown, ...rest: unknown[]) {
       if (isObject(message) && message.method === "tools/call") {
-        enforce(await ask(toolCall(this, message.params)));
+        return await run(toolCall(this, message.params), async () =>
+          send.call(this, message, ...rest),
+        );
       }
       return await send.call(this, message, ...rest);
     }
@@ -133,6 +336,75 @@ export class Paidwen {
     };
   }
 
+  http(options: HttpOptions = {}): () => void {
+    if (this.#interceptor) {
+      throw new PaidwenError("The HTTP calls of this process are already captured by Paidwen.");
+    }
+    const ignore = options.ignore ?? [];
+    const interceptor = new HttpRequestInterceptor();
+    const open = new Map<string, { span: Span; at: number }>();
+    interceptor.on("request", async ({ request, requestId, controller }) => {
+      const current = scope();
+      if (current.silenced || current.inAction || isTracingSuppressed(context.active())) return;
+      const now = Date.now();
+      for (const [id, entry] of open) {
+        if (now - entry.at > FORGOTTEN_REQUEST_MS) {
+          open.delete(id);
+          finish(entry.span, new PaidwenError("The HTTP call never received a response."));
+        }
+      }
+      let span: Span | undefined;
+      try {
+        const host = new URL(request.url).host;
+        if (ignore.some((pattern) => matches(pattern, host))) return;
+        const call = await describe(request);
+        span = this.#journal.startTool(call.tool.name, toolAttributes(call));
+        await this.#authorize(call, span);
+        started(span);
+        open.set(requestId, { span, at: Date.now() });
+      } catch (error) {
+        if (span) finish(span, error);
+        if (error instanceof PaidwenError) {
+          controller.errorWith(error);
+          return;
+        }
+        console.warn(
+          `Paidwen could not read an HTTP call, so the SDK applies onUnavailable: ${error}`,
+        );
+        if (this.#onUnavailable === "block") {
+          controller.errorWith(error instanceof Error ? error : new PaidwenError(String(error)));
+        }
+      }
+    });
+    interceptor.on("response", ({ response, requestId }) => {
+      const entry = open.get(requestId);
+      if (!entry) return;
+      open.delete(requestId);
+      entry.span.setAttribute("http.response.status_code", response.status);
+      finish(entry.span, response.status >= 400 ? new HttpStatusError(response.status) : undefined);
+    });
+    interceptor.apply();
+    this.#interceptor = interceptor;
+    return () => {
+      interceptor.dispose();
+      if (this.#interceptor === interceptor) this.#interceptor = undefined;
+    };
+  }
+
+  spanProcessor(): SpanProcessor {
+    return this.#journal.processor();
+  }
+
+  flush(): Promise<void> {
+    return this.#journal.flush();
+  }
+
+  async shutdown(): Promise<void> {
+    this.#interceptor?.dispose();
+    this.#interceptor = undefined;
+    await this.#journal.shutdown();
+  }
+
   #fallback(request: DecisionRequest, cause: unknown): Decision {
     const reason = cause instanceof Error ? cause.message : String(cause);
     console.warn(
@@ -146,6 +418,22 @@ export class Paidwen {
       decided_at: new Date().toISOString(),
     };
   }
+}
+
+class HttpStatusError extends Error {
+  override name: string;
+
+  constructor(status: number) {
+    super(`The server answered HTTP ${status}.`);
+    this.name = String(status);
+  }
+}
+
+function toolAttributes(input: DecisionInput): Record<string, string> {
+  const attributes: Record<string, string> = { "paidwen.tool.kind": input.tool.kind };
+  if (input.tool.server !== undefined) attributes["paidwen.tool.server"] = input.tool.server;
+  if (input.action_id !== undefined) attributes["paidwen.action.id"] = input.action_id;
+  return attributes;
 }
 
 function toolCall(client: McpClient, params: unknown): DecisionInput {
@@ -162,19 +450,6 @@ function toolCall(client: McpClient, params: unknown): DecisionInput {
     },
     params: isObject(call.arguments) ? call.arguments : {},
   };
-}
-
-function enforce(decision: Decision): void {
-  switch (decision.verdict) {
-    case "allow":
-      return;
-    case "block":
-    case "quarantine":
-      throw new DeniedError(decision);
-    case "require_approval":
-    case "escalate":
-      throw new PendingError(decision);
-  }
 }
 
 function environment(name: string): string | undefined {
