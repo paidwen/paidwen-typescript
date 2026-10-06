@@ -1,4 +1,4 @@
-import type { ApprovalStatus, Decision, Problem } from "./types.ts";
+import type { ApprovalStatus, Decision, IncidentReference, Problem } from "./types.ts";
 
 export class PaidwenError extends Error {
   override name = "PaidwenError";
@@ -8,11 +8,13 @@ export class DeniedError extends PaidwenError {
   override name = "DeniedError";
   readonly decision: Decision;
   readonly approval: ApprovalStatus | undefined;
+  readonly incident: IncidentReference | undefined;
 
   constructor(decision: Decision, approval?: ApprovalStatus) {
     super(describe(decision, approval));
     this.decision = decision;
     this.approval = approval;
+    this.incident = decision.incident;
   }
 }
 
@@ -32,10 +34,27 @@ export class RequestError extends PaidwenError {
   readonly problem: Problem | undefined;
 
   constructor(status: number, problem: Problem | undefined) {
-    super(problem?.detail ?? problem?.title ?? `Paidwen refused the request with HTTP ${status}.`);
+    super(refusal(status, problem));
     this.status = status;
     this.problem = problem;
   }
+}
+
+export function reasonOf(problem: Problem | undefined): string | undefined {
+  for (const text of [problem?.detail, problem?.title]) {
+    if (typeof text === "string" && text.length > 0) return text;
+  }
+  return undefined;
+}
+
+function refusal(status: number, problem: Problem | undefined): string {
+  const reason = reasonOf(problem);
+  if (status === 403) {
+    return reason === undefined
+      ? "Paidwen refused the agent with HTTP 403."
+      : `Paidwen refused the agent: ${reason}`;
+  }
+  return reason ?? `Paidwen refused the request with HTTP ${status}.`;
 }
 
 function describe(decision: Decision, approval?: ApprovalStatus): string {
@@ -45,6 +64,12 @@ function describe(decision: Decision, approval?: ApprovalStatus): string {
   }
   if (approval?.status === "expired") {
     return `${answer}, and the wait expired without an answer.`;
+  }
+  if (decision.incident) {
+    const quarantine = `the agent is in quarantine (incident ${decision.incident.id})`;
+    return decision.rule_id === null
+      ? `${answer} because ${quarantine}.`
+      : `${answer} by rule ${decision.rule_id}, and ${quarantine}.`;
   }
   if (decision.rule_id !== null) {
     return `${answer} by rule ${decision.rule_id}.`;

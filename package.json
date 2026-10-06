@@ -1,12 +1,12 @@
 {
   "name": "paidwen",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Paidwen SDK: the agent asks Paidwen before each action and applies the answer.",
   "license": "Apache-2.0",
+  "homepage": "https://paidwen.com/docs",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/RaselisonToky/paidwen.git",
-    "directory": "sdk/typescript"
+    "url": "git+https://github.com/paidwen/paidwen-typescript.git"
   },
   "type": "module",
   "exports": {

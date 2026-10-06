@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, it } from "node:test";
-import { DeniedError, Paidwen, PendingError, type Wait } from "../src/index.ts";
-import { bodyOf, FakePaidwen, status, waiting } from "./fake.ts";
+import { DeniedError, Paidwen, PendingError, RequestError, type Wait } from "../src/index.ts";
+import { bodyOf, DISABLED, FakePaidwen, status, waiting } from "./fake.ts";
 
 describe("a wrapped function that waits for a human answer", () => {
   const fake = new FakePaidwen();
@@ -81,6 +81,28 @@ describe("a wrapped function that waits for a human answer", () => {
     fake.script = [{ status: 503 }, status("approved")];
     assert.equal(await client().tool("payments.refund", async () => "ran")({}), "ran");
     assert.equal(fake.polls.length, 2);
+  });
+
+  it("stops at once when Paidwen refuses the agent during the wait", async () => {
+    fake.script = [{ status: 403, body: DISABLED }, status("approved")];
+    let runs = 0;
+    const waits: Wait[] = [];
+    const refund = client({ onUnavailable: "allow", onWait: (wait) => void waits.push(wait) }).tool(
+      "payments.refund",
+      async () => ++runs,
+    );
+    await assert.rejects(refund({ amount: 2500 }), (error: unknown) => {
+      assert.ok(error instanceof RequestError);
+      assert.equal(error.status, 403);
+      assert.equal(
+        error.message,
+        "Paidwen refused the agent: The agent is disabled until someone enables it.",
+      );
+      return true;
+    });
+    assert.equal(runs, 0);
+    assert.equal(waits.length, 0);
+    assert.equal(fake.polls.length, 1);
   });
 
   it("returns the hand at once with onPending throw", async () => {

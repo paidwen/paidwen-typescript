@@ -12,7 +12,7 @@ import {
   takeActionId,
   withContext,
 } from "./context.ts";
-import { DeniedError, PaidwenError, PendingError, RequestError } from "./errors.ts";
+import { DeniedError, PaidwenError, PendingError, RequestError, reasonOf } from "./errors.ts";
 import { matches } from "./http.ts";
 import { finish, Journal, started, traceparent } from "./journal.ts";
 import type {
@@ -65,8 +65,9 @@ export interface McpClient {
 
 export type McpTarget = McpClient | (abstract new (...args: never[]) => McpClient);
 
-const VERSION = "0.7.0";
+const VERSION = "0.8.0";
 const DEFAULT_BASE_URL = "https://api.paidwen.com";
+const QUOTA_EXCEEDED = "https://paidwen.com/problems/quota-exceeded";
 const DEFAULT_TIMEOUT_MS = 3000;
 const SLOW_DOWN_SECONDS = 5;
 const WAIT_GRACE_SECONDS = 60;
@@ -166,22 +167,20 @@ export class Paidwen {
         }),
       );
     } catch (cause) {
-      return this.#fallback(request, cause);
+      return this.#fallback(request, "Paidwen did not answer", messageOf(cause));
     }
     if (response.status >= 500) {
-      response.body?.cancel().catch(() => undefined);
-      return this.#fallback(request, new PaidwenError(`Paidwen answered HTTP ${response.status}.`));
+      const problem = await problemOf(response);
+      return this.#fallback(request, unavailable(response.status, problem), reasonOf(problem));
+    }
+    if (!response.ok) {
+      throw new RequestError(response.status, await problemOf(response));
     }
     let body: unknown;
     try {
       body = await response.json();
     } catch (cause) {
-      if (response.ok) {
-        return this.#fallback(request, cause);
-      }
-    }
-    if (!response.ok) {
-      throw new RequestError(response.status, isObject(body) ? (body as Problem) : undefined);
+      return this.#fallback(request, "Paidwen did not answer", messageOf(cause));
     }
     return body as Decision;
   }
@@ -246,14 +245,14 @@ export class Paidwen {
       response.body?.cancel().catch(() => undefined);
       return { kind: "unavailable" };
     }
+    if (!response.ok) {
+      throw new RequestError(response.status, await problemOf(response));
+    }
     let body: unknown;
     try {
       body = await response.json();
     } catch {
       return { kind: "unavailable" };
-    }
-    if (!response.ok) {
-      throw new RequestError(response.status, isObject(body) ? (body as Problem) : undefined);
     }
     return { kind: "status", status: body as ApprovalStatus };
   }
@@ -261,6 +260,9 @@ export class Paidwen {
   async #authorize(input: DecisionInput, span: Span): Promise<void> {
     const decision = await this.#ask(input, span);
     span.setAttribute("paidwen.action.id", decision.action_id);
+    if (decision.incident) {
+      throw new DeniedError(decision);
+    }
     switch (decision.verdict) {
       case "allow":
         return;
@@ -420,11 +422,9 @@ export class Paidwen {
     await this.#journal.shutdown();
   }
 
-  #fallback(request: DecisionRequest, cause: unknown): Decision {
-    const reason = cause instanceof Error ? cause.message : String(cause);
-    console.warn(
-      `Paidwen did not answer, so the SDK applies onUnavailable "${this.#onUnavailable}": ${reason}`,
-    );
+  #fallback(request: DecisionRequest, cause: string, reason: string | undefined): Decision {
+    const applied = `${cause}, so the SDK applies onUnavailable "${this.#onUnavailable}"`;
+    console.warn(reason ? `${applied}: ${reason}` : `${applied}.`);
     return {
       action_id: request.action_id,
       verdict: this.#onUnavailable,
@@ -465,6 +465,26 @@ function toolCall(client: McpClient, params: unknown): DecisionInput {
     },
     params: isObject(call.arguments) ? call.arguments : {},
   };
+}
+
+async function problemOf(response: Response): Promise<Problem | undefined> {
+  try {
+    const body: unknown = await response.json();
+    return isObject(body) ? (body as Problem) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function unavailable(status: number, problem: Problem | undefined): string {
+  const answered = `Paidwen answered HTTP ${status}`;
+  return problem?.type === QUOTA_EXCEEDED
+    ? `${answered} because the organization reached the events its plan allows this month`
+    : answered;
+}
+
+function messageOf(cause: unknown): string {
+  return cause instanceof Error ? cause.message : String(cause);
 }
 
 function environment(name: string): string | undefined {

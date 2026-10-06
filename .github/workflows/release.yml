@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Test and pack
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: The tag names the version of the package
+        run: test "$GITHUB_REF_NAME" = "v$(node --print "require('./package.json').version")"
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: npm pack
+      - uses: actions/upload-artifact@v7
+        with:
+          name: package
+          path: paidwen-*.tgz
+          if-no-files-found: error
+
+  publish:
+    name: Publish to npm
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/paidwen
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: npm is 11.5.1 or later, as trusted publishing requires
+        run: test "$(printf '%s\n' 11.5.1 "$(npm --version)" | sort -V | head -n 1)" = 11.5.1
+      - uses: actions/download-artifact@v8
+        with:
+          name: package
+      - run: npm publish ./paidwen-*.tgz --provenance

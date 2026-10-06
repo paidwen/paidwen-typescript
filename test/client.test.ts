@@ -11,9 +11,19 @@ import {
   RequestError,
   type Verdict,
 } from "../src/index.ts";
+import { DISABLED } from "./fake.ts";
 
 const ACTION_ID = "6f1c2a7e-3b5d-4c8e-9a10-2f4b6d8e0a12";
+const INCIDENT_ID = "3c7e5a10-9b2d-4f6e-8a1c-5d4b3a2f1e0d";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const QUOTA_CAUSE =
+  "Paidwen answered HTTP 503 because the organization reached the events its plan allows this month";
+const QUOTA = {
+  type: "https://paidwen.com/problems/quota-exceeded",
+  title: "The organization reached the events its plan allows this month.",
+  status: 503,
+  detail: "The organization used the 5000 events of the Free plan in October 2026.",
+};
 
 interface Call {
   url: string;
@@ -175,6 +185,64 @@ describe("decide", () => {
     );
     assert.equal(warn.mock.callCount(), 0);
   });
+
+  it("says that Paidwen refused the agent on a 403, and never retries nor falls back", async () => {
+    const calls: Call[] = [];
+    const ask = (body: unknown) =>
+      client(server(403, body, calls), { onUnavailable: "allow" }).decide({
+        tool: { name: "x", kind: "function" },
+      });
+    await assert.rejects(
+      ask(DISABLED),
+      (error: unknown) =>
+        error instanceof RequestError &&
+        error.status === 403 &&
+        error.message ===
+          "Paidwen refused the agent: The agent is disabled until someone enables it." &&
+        error.problem?.type === "https://paidwen.com/problems/agent-disabled",
+    );
+    await assert.rejects(ask({ ...DISABLED, detail: undefined }), {
+      message: "Paidwen refused the agent: The agent is disabled.",
+    });
+    await assert.rejects(ask(""), { message: "Paidwen refused the agent with HTTP 403." });
+    assert.equal(calls.length, 3);
+    assert.equal(warn.mock.callCount(), 0);
+  });
+
+  it("applies onUnavailable when the organization reached its quota, and names the cause", async () => {
+    const blocked = await client(server(503, QUOTA)).decide({
+      tool: { name: "x", kind: "function" },
+    });
+    const allowed = await client(server(503, QUOTA), { onUnavailable: "allow" }).decide({
+      tool: { name: "x", kind: "function" },
+    });
+    assert.equal(blocked.verdict, "block");
+    assert.equal(allowed.verdict, "allow");
+    assert.deepEqual(
+      warn.mock.calls.map((call) => call.arguments[0]),
+      [
+        `${QUOTA_CAUSE}, so the SDK applies onUnavailable "block": ${QUOTA.detail}`,
+        `${QUOTA_CAUSE}, so the SDK applies onUnavailable "allow": ${QUOTA.detail}`,
+      ],
+    );
+  });
+
+  it("repeats the problem of a server error in its warning", async () => {
+    const starting = {
+      type: "https://paidwen.com/problems/unavailable",
+      title: "The service cannot answer yet.",
+      status: 503,
+    };
+    await client(server(503, starting)).decide({ tool: { name: "x", kind: "function" } });
+    await client(server(502, "<html>")).decide({ tool: { name: "x", kind: "function" } });
+    assert.deepEqual(
+      warn.mock.calls.map((call) => call.arguments[0]),
+      [
+        'Paidwen answered HTTP 503, so the SDK applies onUnavailable "block": The service cannot answer yet.',
+        'Paidwen answered HTTP 502, so the SDK applies onUnavailable "block".',
+      ],
+    );
+  });
 });
 
 describe("tool", () => {
@@ -233,6 +301,54 @@ describe("tool", () => {
         error.message ===
           `Paidwen answered block for action ${ACTION_ID} because the permissions of the agent do not allow it.`,
     );
+  });
+
+  it("says that the agent is in quarantine and names the incident", async () => {
+    const incident = { id: INCIDENT_ID, kind: "quarantine" as const };
+    const cases: [Decision, string][] = [
+      [
+        { ...decision("quarantine"), incident },
+        `Paidwen answered quarantine for action ${ACTION_ID} because the agent is in quarantine (incident ${INCIDENT_ID}).`,
+      ],
+      [
+        { ...decision("quarantine", "rule-7"), incident },
+        `Paidwen answered quarantine for action ${ACTION_ID} by rule rule-7, and the agent is in quarantine (incident ${INCIDENT_ID}).`,
+      ],
+      [
+        { ...decision("allow"), incident },
+        `Paidwen answered allow for action ${ACTION_ID} because the agent is in quarantine (incident ${INCIDENT_ID}).`,
+      ],
+    ];
+    for (const [answer, message] of cases) {
+      const run = mock.fn(() => "done");
+      await assert.rejects(client(server(200, answer)).tool("x", run)({}), (error: unknown) => {
+        assert.ok(error instanceof DeniedError);
+        assert.equal(error.message, message);
+        assert.deepEqual(error.incident, incident);
+        assert.deepEqual(error.decision.incident, incident);
+        return true;
+      });
+      assert.equal(run.mock.callCount(), 0);
+    }
+  });
+
+  it("never runs the function when Paidwen refuses the agent, even with onUnavailable allow", async () => {
+    const calls: Call[] = [];
+    const run = mock.fn(() => "done");
+    const wrapped = client(server(403, DISABLED, calls), { onUnavailable: "allow" }).tool("x", run);
+    await assert.rejects(wrapped({}), RequestError);
+    assert.equal(run.mock.callCount(), 0);
+    assert.equal(calls.length, 1);
+  });
+
+  it("runs the function when the quota is reached and the agent chose allow", async () => {
+    mock.method(console, "warn", () => undefined);
+    const run = mock.fn(() => "done");
+    const wrapped = client(server(503, QUOTA), { onUnavailable: "allow" }).tool("x", run);
+    assert.equal(await wrapped({}), "done");
+    assert.equal(run.mock.callCount(), 1);
+    await assert.rejects(client(server(503, QUOTA)).tool("x", run)({}), DeniedError);
+    assert.equal(run.mock.callCount(), 1);
   });
 
   it("waits when Paidwen asks for a human answer", async () => {

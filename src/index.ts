@@ -21,6 +21,8 @@ export type {
   Cost,
   Decision,
   DecisionRequest,
+  IncidentKind,
+  IncidentReference,
   ObservedRule,
   OnExpiry,
   PermissionOutcome,

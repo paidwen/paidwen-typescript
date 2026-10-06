@@ -3,8 +3,8 @@ import { once } from "node:events";
 import { createServer, get as httpGet, request as httpRequest, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { after, afterEach, before, beforeEach, describe, it } from "node:test";
-import { DeniedError, Paidwen } from "../src/index.ts";
-import { decision, FakePaidwen } from "./fake.ts";
+import { DeniedError, Paidwen, RequestError } from "../src/index.ts";
+import { DISABLED, decision, FakePaidwen } from "./fake.ts";
 
 describe("the HTTP capture", () => {
   const fake = new FakePaidwen();
@@ -95,6 +95,26 @@ describe("the HTTP capture", () => {
     fake.answer = (request) => decision(request, "block", { rule_id: "no-refunds" });
     capture();
     await assert.rejects(fetch(`${apiUrl}/v1/refunds`, { method: "POST" }), DeniedError);
+    assert.equal(received.length, 0);
+  });
+
+  it("never sends a call when Paidwen refuses the agent, even with onUnavailable allow", async () => {
+    const paidwen = new Paidwen({
+      apiKey: "pw_test_key",
+      baseUrl: fake.url,
+      journal: false,
+      onUnavailable: "allow",
+      fetch: async () =>
+        new Response(JSON.stringify(DISABLED), {
+          status: 403,
+          headers: { "content-type": "application/problem+json" },
+        }),
+    });
+    release = paidwen.http();
+    await assert.rejects(
+      fetch(`${apiUrl}/v1/refunds`, { method: "POST" }),
+      (error: unknown) => error instanceof RequestError && error.status === 403,
+    );
     assert.equal(received.length, 0);
   });
 

@@ -1,7 +1,14 @@
 import { once } from "node:events";
 import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import type { Decision, DecisionRequest } from "../src/index.ts";
+import type { Decision, DecisionRequest, Problem } from "../src/index.ts";
+
+export const DISABLED: Problem = {
+  type: "https://paidwen.com/problems/agent-disabled",
+  title: "The agent is disabled.",
+  status: 403,
+  detail: "The agent is disabled until someone enables it.",
+};
 
 export interface Recorded {
   path: string;
