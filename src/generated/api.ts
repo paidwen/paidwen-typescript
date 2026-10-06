@@ -389,6 +389,795 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/agents/{agent_id}/quarantine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: components["parameters"]["AgentID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Put an agent in quarantine.
+         * @description Every decision of the agent answers quarantine until someone releases it. The agent still signs in, and its requests still reach the journal. An agent already in quarantine answers its open incident. A disabled agent answers 409. The contacts of the organization receive the incident.
+         */
+        post: operations["quarantineAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agents/{agent_id}/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: components["parameters"]["AgentID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Release an agent from quarantine.
+         * @description An agent that is not in quarantine answers 409.
+         */
+        post: operations["releaseAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agents/{agent_id}/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: components["parameters"]["AgentID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Disable an agent.
+         * @description The decision point refuses every request of the agent with 403 until someone enables it. A quarantine in progress ends, replaced by the disabling. An agent already disabled answers its open incident.
+         */
+        post: operations["disableAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agents/{agent_id}/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: components["parameters"]["AgentID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Enable a disabled agent.
+         * @description An agent that is not disabled answers 409.
+         */
+        post: operations["enableAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agents/{agent_id}/revoke-keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: components["parameters"]["AgentID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke every active key of an agent at once.
+         * @description The agent signs in no more until it receives a new key.
+         */
+        post: operations["revokeAgentKeys"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agents/{agent_id}/rotate-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: components["parameters"]["AgentID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke every active key of an agent and give it a new key.
+         * @description The response carries the new key once, in secret.
+         */
+        post: operations["rotateAgentKey"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/incidents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the incidents of the organization, the most recent first. */
+        get: operations["listIncidents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/incidents/{incident_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                incident_id: components["parameters"]["IncidentID"];
+            };
+            cookie?: never;
+        };
+        /** Read an incident. */
+        get: operations["getIncident"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the actions of the organization, the most recent first, read from the journal.
+         * @description Each action carries an opaque cursor. before reads the actions older than a cursor, and after reads the actions more recent than a cursor, at most 15 minutes back, which feeds the live view.
+         */
+        get: operations["listActions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/costs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the costs per agent and per day of a period, read from the journal.
+         * @description A day counts what the budget of each agent counts: the calls to a model, the actions allowed at their decision, and the actions approved, or expired with on_expiry set to allow, at their answer. The period runs from from, included, to to, excluded, and lasts at most 366 days.
+         */
+        get: operations["getCosts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agents/{agent_id}/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: components["parameters"]["AgentID"];
+            };
+            cookie?: never;
+        };
+        /** Read what an agent did in a period, and what each rule did for it, read from the journal. */
+        get: operations["getAgentActivity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/google": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Start signing in with Google, following OpenID Connect.
+         * @description Keeps the PKCE verifier, the state and the nonce in a cookie for 10 minutes, then sends the browser to Google.
+         */
+        get: operations["startGoogleSignIn"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/google/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Finish signing in with Google.
+         * @description Checks the state against the cookie, exchanges the code, checks the identity token, opens a session, then sends the browser back to the dashboard. A failed sign-in sends the browser to the sign-in page with its reason.
+         */
+        get: operations["finishGoogleSignIn"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/github": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Start signing in with GitHub, following OAuth 2.0.
+         * @description Keeps the PKCE verifier and the state in a cookie for 10 minutes, then sends the browser to GitHub.
+         */
+        get: operations["startGitHubSignIn"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/github/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Finish signing in with GitHub.
+         * @description Checks the state against the cookie, exchanges the code, reads the GitHub identifier and the verified primary email of the person, opens a session, then sends the browser back to the dashboard.
+         */
+        get: operations["finishGitHubSignIn"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/email-links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send a sign-in link by email.
+         * @description The answer is 202 whether the address has an account or not, and whether the link leaves or not. An address receives at most 5 links per quarter of an hour. The link lives 10 minutes and serves once.
+         */
+        post: operations["sendEmailLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/email-links/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sign in with the token of an email link. */
+        post: operations["verifyEmailLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the signed-in person and the organizations they belong to. */
+        get: operations["getMe"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Close the session of the call. */
+        delete: operations["signOut"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Close every session of the signed-in person. */
+        delete: operations["signOutEverywhere"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organizations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create an organization, with the signed-in person as its admin, in the free plan. */
+        post: operations["createOrganization"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/invitations/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Join an organization with the token of an invitation.
+         * @description The verified email of the person must be the invited email.
+         */
+        post: operations["acceptInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organization": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the settings of the organization. */
+        get: operations["getOrganization"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Change the settings of the organization, following JSON Merge Patch. */
+        patch: operations["updateOrganization"];
+        trace?: never;
+    };
+    "/v1/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the people of the organization, in the order of their arrival. */
+        get: operations["listMembers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/members/{person_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                person_id: components["parameters"]["PersonID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a person from the organization.
+         * @description The person loses the organization at their next call. A person may always leave. Removing the last admin answers 409.
+         */
+        delete: operations["removeMember"];
+        options?: never;
+        head?: never;
+        /**
+         * Change the role of a person in the organization.
+         * @description The organization always keeps one admin at least, so demoting the last one answers 409.
+         */
+        patch: operations["updateMember"];
+        trace?: never;
+    };
+    "/v1/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the invitations of the organization that wait for an answer. */
+        get: operations["listInvitations"];
+        put?: never;
+        /**
+         * Invite a person by email, with a role.
+         * @description The invitation leaves by email, with a link that lives 7 days and serves once. A person already in the organization, or an address already invited, answers 409.
+         */
+        post: operations["createInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/invitations/{invitation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invitation_id: components["parameters"]["InvitationID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Withdraw an invitation that waits for an answer. */
+        delete: operations["revokeInvitation"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin-keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the active and revoked admin keys of the organization, in the order of their creation. */
+        get: operations["listAdminKeys"];
+        put?: never;
+        /**
+         * Create an admin key for the scripts of the organization.
+         * @description The response carries the key once, in secret.
+         */
+        post: operations["createAdminKey"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin-keys/{key_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key_id: components["parameters"]["KeyID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke an admin key.
+         * @description The key stops working at once. Revoking a revoked key succeeds again.
+         */
+        delete: operations["revokeAdminKey"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/billing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the plan of the organization, its subscription, its usage this month and the cap of its invoice. */
+        get: operations["getBilling"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Set or remove the cap of the invoice, following JSON Merge Patch.
+         * @description The cap bounds what a month costs: the price of the plan and the events beyond the included ones. At the cap, the decision point answers 503 until the next month. Only Scale and Business take a cap, at least the price of a month of their plan.
+         */
+        patch: operations["updateBilling"];
+        trace?: never;
+    };
+    "/v1/billing/checkout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Prepare the payment by card of a paid plan.
+         * @description Creates the transaction at the seller of record, and gives what the dashboard needs to open its checkout. The plan opens only when the seller confirms the payment, by its webhook or by the synchronization that follows the checkout. An organization that already pays answers 409 and changes its plan instead.
+         */
+        post: operations["createCheckout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/billing/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Read a paid transaction and its subscription from the seller of record, and apply them.
+         * @description The dashboard calls it when the checkout says the payment completed. It applies the same state as the webhook, read from the seller and never from the browser.
+         */
+        post: operations["syncBilling"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/billing/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change the paid plan of the subscription, with a prorated charge or credit.
+         * @description Going back to the free plan cancels the subscription instead.
+         */
+        post: operations["changePlan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/billing/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel the subscription at the end of its billing period.
+         * @description The plan stays until the end of the period, then the organization goes back to the free plan.
+         */
+        post: operations["cancelSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/billing/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Remove a scheduled cancellation, so that the subscription renews. */
+        post: operations["resumeSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/billing/portal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Open the customer portal of the seller of record, to change the card and read the invoices. */
+        post: operations["createBillingPortal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/paddle/webhooks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Receive an event of Paddle, the seller of record.
+         * @description The Paddle-Signature header must carry a valid HMAC-SHA256 of the body with the secret of the notification destination. The same event sent again changes nothing. Any answer other than 2xx makes Paddle send the event again.
+         */
+        post: operations["receivePaddleWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/slack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the Slack workspace connected to the organization. */
+        get: operations["getSlack"];
+        put?: never;
+        post?: never;
+        /** Disconnect the Slack workspace, and revoke the token of its bot. */
+        delete: operations["disconnectSlack"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/slack/install": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Start adding Paidwen to a Slack workspace, following OAuth 2.0.
+         * @description The browser comes from the Add to Slack button of the dashboard, so the organization travels in the query. The person must be an admin of it.
+         */
+        get: operations["installSlack"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/slack/oauth/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Finish adding Paidwen to a Slack workspace.
+         * @description Checks the state against the cookie and the session, exchanges the code with oauth.v2.access, seals the token of the bot, connects the workspace, then sends the browser back to the dashboard.
+         */
+        get: operations["finishSlackInstall"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -504,6 +1293,7 @@ export interface components {
             permission?: components["schemas"]["PermissionOutcome"];
             budget?: components["schemas"]["BudgetOutcome"];
             approval?: components["schemas"]["Approval"];
+            incident?: components["schemas"]["IncidentReference"];
             /** Format: date-time */
             decided_at: string;
         };
@@ -582,6 +1372,8 @@ export interface components {
             budget?: components["schemas"]["Budget"];
             /** @description Whether the journal keeps the content of the exchanges of the agent: the instructions, the messages and the parameters of the tools. */
             record_content: boolean;
+            status: components["schemas"]["AgentStatus"];
+            spent?: components["schemas"]["AgentSpent"];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -777,7 +1569,7 @@ export interface components {
          * @description Where the answer came from. expiry means that no one answered before the deadline.
          * @enum {string}
          */
-        ApprovalChannel: "slack" | "email" | "api" | "expiry";
+        ApprovalChannel: "slack" | "email" | "api" | "dashboard" | "expiry";
         /** @description An action that waits, or waited, for a human answer. */
         ApprovalRequest: {
             /** Format: uuid */
@@ -866,6 +1658,7 @@ export interface components {
             budget?: components["schemas"]["BudgetOutcome"];
             approval?: components["schemas"]["AuditApproval"];
             execution?: components["schemas"]["AuditExecution"];
+            incident?: components["schemas"]["IncidentReference"];
             /** @description The journal lines the record comes from, following contracts/journal.schema.json. */
             lines?: {
                 [key: string]: unknown;
@@ -885,6 +1678,12 @@ export interface components {
             budget?: components["schemas"]["SnapshotBudget"];
             /** @default true */
             record_content: boolean;
+            status?: components["schemas"]["AgentStatus"];
+            /**
+             * Format: uuid
+             * @description The open incident that quarantines or disables the agent.
+             */
+            incident_id?: string;
         };
         /** @description The limits of the agent, in billionths of a US dollar. */
         SnapshotBudget: {
@@ -922,6 +1721,11 @@ export interface components {
              * @default 7
              */
             retention_days: number;
+            /**
+             * Format: int64
+             * @description The events the organization may write this month, from its plan and the cap of its invoice. Without it, the organization has no limit.
+             */
+            usage_limit?: number;
             approval_groups?: components["schemas"]["SnapshotApprovalGroup"][];
             approval_defaults?: components["schemas"]["SnapshotApprovalDefaults"];
             agents: components["schemas"]["SnapshotAgent"][];
@@ -971,6 +1775,370 @@ export interface components {
             rules: components["schemas"]["ConformanceRule"][];
             request: components["schemas"]["DecisionRequest"];
             expected: components["schemas"]["ConformanceExpectation"];
+        };
+        /**
+         * @description active answers as usual. quarantined answers quarantine to every decision, and the journal still records them. disabled refuses every request of the agent with 403.
+         * @enum {string}
+         */
+        AgentStatus: "active" | "quarantined" | "disabled";
+        /** @description What the agent spent today and this month, in US dollars, as its budget counts it. */
+        AgentSpent: {
+            /** Format: double */
+            today_usd: number;
+            /** Format: double */
+            month_usd: number;
+        };
+        /**
+         * @description The gesture that opened the incident.
+         * @enum {string}
+         */
+        IncidentKind: "quarantine" | "disable" | "revoke_keys" | "rotate_key";
+        /**
+         * @description open while the quarantine or the disabling holds, lifted once someone ends it, done for a revocation or a key change, which stays.
+         * @enum {string}
+         */
+        IncidentState: "open" | "lifted" | "done";
+        IncidentReference: {
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["IncidentKind"];
+        };
+        /** @description Who made a gesture, a person, an admin key or a rule. */
+        IncidentActor: {
+            /** @enum {string} */
+            kind: "person" | "admin_key" | "rule";
+            /** @description The email of the person. */
+            email?: string;
+            /** @description The redacted admin key. */
+            redacted?: string;
+            rule?: components["schemas"]["RuleReference"];
+        };
+        Incident: {
+            /** Format: uuid */
+            id: string;
+            agent: components["schemas"]["AgentReference"];
+            kind: components["schemas"]["IncidentKind"];
+            state: components["schemas"]["IncidentState"];
+            reason?: string;
+            /**
+             * Format: uuid
+             * @description The action that made a rule quarantine the agent.
+             */
+            action_id?: string;
+            /**
+             * Format: int32
+             * @description The active keys a revocation or a key change revoked.
+             */
+            keys_revoked?: number;
+            opened_by: components["schemas"]["IncidentActor"];
+            /** Format: date-time */
+            opened_at: string;
+            lifted_by?: components["schemas"]["IncidentActor"];
+            /** Format: date-time */
+            lifted_at?: string;
+            lift_reason?: string;
+        };
+        IncidentList: {
+            data: components["schemas"]["Incident"][];
+            has_more: boolean;
+        };
+        IncidentRequest: {
+            /** @description Why the gesture is made, kept in the incident and the journal. */
+            reason?: string;
+        };
+        RotatedAgentKey: {
+            incident: components["schemas"]["Incident"];
+            key: components["schemas"]["CreatedAgentKey"];
+        };
+        /** @description An action of an agent and its decision, read from the journal. */
+        Action: {
+            /** Format: uuid */
+            action_id: string;
+            /** @description The opaque position of the action, for the before and after parameters. */
+            cursor: string;
+            agent: components["schemas"]["AuditAgent"];
+            tool: components["schemas"]["Tool"];
+            verdict: components["schemas"]["Verdict"];
+            rule?: components["schemas"]["RuleReference"];
+            observed: components["schemas"]["ObservedRule"][];
+            cost?: components["schemas"]["Cost"];
+            session_id?: string;
+            /** Format: date-time */
+            decided_at: string;
+            approval?: components["schemas"]["AuditApproval"];
+            incident?: components["schemas"]["IncidentReference"];
+            execution?: components["schemas"]["AuditExecution"];
+        };
+        ActionList: {
+            data: components["schemas"]["Action"][];
+            has_more: boolean;
+        };
+        CostDay: {
+            /** Format: date */
+            day: string;
+            agent: components["schemas"]["AgentReference"];
+            /** Format: double */
+            models_usd: number;
+            /** Format: double */
+            tools_usd: number;
+            /** Format: int64 */
+            decisions: number;
+            /** Format: int64 */
+            model_calls: number;
+        };
+        CostReport: {
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            to: string;
+            /** @description One line per day and per agent that cost something or acted, in UTC. */
+            days: components["schemas"]["CostDay"][];
+        };
+        VerdictCounts: {
+            /** Format: int64 */
+            allow: number;
+            /** Format: int64 */
+            require_approval: number;
+            /** Format: int64 */
+            escalate: number;
+            /** Format: int64 */
+            block: number;
+            /** Format: int64 */
+            quarantine: number;
+        };
+        RuleActivity: {
+            rule: components["schemas"]["RuleReference"];
+            /**
+             * Format: int64
+             * @description The actions of the agent whose verdict this rule gave.
+             */
+            decided: number;
+            /**
+             * Format: int64
+             * @description The actions of the agent this rule answered in observation.
+             */
+            observed: number;
+        };
+        AgentActivity: {
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            to: string;
+            verdicts: components["schemas"]["VerdictCounts"];
+            rules: components["schemas"]["RuleActivity"][];
+            /** Format: double */
+            models_usd: number;
+            /** Format: double */
+            tools_usd: number;
+        };
+        /**
+         * @description viewer reads. member also writes the agents, their keys, permissions and budgets, the rules, the approval groups and the incident response. admin also manages the people, the admin keys, the plan and the settings of the organization.
+         * @enum {string}
+         */
+        Role: "viewer" | "member" | "admin";
+        Person: {
+            /** Format: uuid */
+            id: string;
+            /** Format: email */
+            email: string;
+            name?: string;
+        };
+        /** @enum {string} */
+        PlanID: "free" | "starter" | "scale" | "business";
+        OrganizationSummary: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            plan: components["schemas"]["PlanID"];
+        };
+        Membership: {
+            organization: components["schemas"]["OrganizationSummary"];
+            role: components["schemas"]["Role"];
+            /** Format: date-time */
+            joined_at: string;
+        };
+        Me: {
+            person: components["schemas"]["Person"];
+            memberships: components["schemas"]["Membership"][];
+        };
+        EmailLinkRequest: {
+            /** Format: email */
+            email: string;
+            return_to?: string;
+        };
+        EmailLinkVerification: {
+            token: string;
+        };
+        OrganizationCreate: {
+            name: string;
+        };
+        /** @description Who receives the incidents of the organization. */
+        IncidentContacts: {
+            emails: string[];
+            slack_channel?: string;
+        };
+        Organization: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            plan: components["schemas"]["PlanID"];
+            incident_contacts: components["schemas"]["IncidentContacts"];
+            /** Format: date-time */
+            created_at: string;
+        };
+        OrganizationPatch: {
+            name?: string;
+            incident_contacts?: {
+                emails?: string[];
+                slack_channel?: string | null;
+            };
+        };
+        Member: {
+            person: components["schemas"]["Person"];
+            role: components["schemas"]["Role"];
+            /** Format: date-time */
+            joined_at: string;
+        };
+        MemberList: {
+            data: components["schemas"]["Member"][];
+            has_more: boolean;
+        };
+        MemberPatch: {
+            role: components["schemas"]["Role"];
+        };
+        Invitation: {
+            /** Format: uuid */
+            id: string;
+            /** Format: email */
+            email: string;
+            role: components["schemas"]["Role"];
+            /** @description The email of the person, or the redacted admin key, that invited. */
+            invited_by?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            expires_at: string;
+        };
+        InvitationCreate: {
+            /** Format: email */
+            email: string;
+            role: components["schemas"]["Role"];
+        };
+        InvitationList: {
+            data: components["schemas"]["Invitation"][];
+            has_more: boolean;
+        };
+        InvitationAcceptance: {
+            token: string;
+        };
+        AdminKey: {
+            /** Format: uuid */
+            id: string;
+            /** @description The prefix and the last four characters of the key, for example pw_admin_...k3Fz. */
+            redacted: string;
+            /** @description The email of the person, or the redacted admin key, that created it. */
+            created_by?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            revoked_at: string | null;
+        };
+        CreatedAdminKey: {
+            /** Format: uuid */
+            id: string;
+            redacted: string;
+            created_by?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            revoked_at: string | null;
+            /** @description The key itself, shown only in this response. */
+            secret: string;
+        };
+        AdminKeyList: {
+            data: components["schemas"]["AdminKey"][];
+            has_more: boolean;
+        };
+        /** @enum {string} */
+        BillingInterval: "month" | "year";
+        /**
+         * @description The state of the subscription at the seller of record. past_due keeps the plan while the seller retries the payment.
+         * @enum {string}
+         */
+        SubscriptionStatus: "active" | "trialing" | "past_due" | "paused" | "canceled";
+        Subscription: {
+            status: components["schemas"]["SubscriptionStatus"];
+            interval: components["schemas"]["BillingInterval"];
+            /** Format: date-time */
+            current_period_start: string;
+            /** Format: date-time */
+            current_period_end: string;
+            /**
+             * Format: date-time
+             * @description When a scheduled cancellation takes effect.
+             */
+            cancel_at?: string;
+        };
+        /** @description The events of the organization this month, as the decision point counts them. */
+        Usage: {
+            month: string;
+            /** Format: int64 */
+            events: number;
+            /** Format: int64 */
+            included: number;
+            /**
+             * Format: int64
+             * @description The events allowed this month. Absent when the organization has no limit.
+             */
+            limit?: number;
+            /** @description True when the organization reached its limit, and the decision point answers 503 until the next month. */
+            stopped: boolean;
+        };
+        Billing: {
+            plan: components["schemas"]["PlanID"];
+            subscription?: components["schemas"]["Subscription"];
+            usage: components["schemas"]["Usage"];
+            /**
+             * Format: double
+             * @description The most a month may cost, set by the organization.
+             */
+            invoice_cap_usd?: number;
+        };
+        BillingPatch: {
+            /** Format: double */
+            invoice_cap_usd?: number | null;
+        };
+        CheckoutRequest: {
+            /** @enum {string} */
+            plan: "starter" | "scale" | "business";
+            interval: components["schemas"]["BillingInterval"];
+        };
+        /** @description What Paddle.js needs to open the checkout of the transaction. */
+        Checkout: {
+            transaction_id: string;
+            /** @enum {string} */
+            environment: "sandbox" | "production";
+            /** @description The client-side token of Paddle.js, which only opens checkouts. */
+            client_token: string;
+        };
+        BillingSync: {
+            transaction_id: string;
+        };
+        PlanChange: {
+            /** @enum {string} */
+            plan: "starter" | "scale" | "business";
+            interval: components["schemas"]["BillingInterval"];
+        };
+        BillingPortal: {
+            /** Format: uri */
+            url: string;
+        };
+        SlackConnection: {
+            connected: boolean;
+            team_id?: string;
+            team_name?: string;
+            /** Format: date-time */
+            connected_at?: string;
         };
     };
     responses: {
@@ -1039,9 +2207,11 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description The service is starting or cannot answer yet. */
+        /** @description The service is starting or cannot answer yet. The decision point also answers 503 with the problem type quota-exceeded when the organization reached the events its plan allows this month, until the first day of the next month in UTC. The Retry-After header gives the seconds to wait. */
         Unavailable: {
             headers: {
+                /** @description The seconds to wait before asking again. */
+                "Retry-After"?: number;
                 [name: string]: unknown;
             };
             content: {
@@ -1068,6 +2238,24 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
+        /** @description The role of the person does not allow the operation, the call comes from another site, the email of the person is not the invited one, or the agent is disabled. */
+        Forbidden: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description The browser goes to the address in Location. */
+        Redirect: {
+            headers: {
+                /** @description The address the browser goes to. */
+                Location?: string;
+                [name: string]: unknown;
+            };
+            content?: never;
+        };
     };
     parameters: {
         /** @description The number of items in the page, from 1 to 100. */
@@ -1092,6 +2280,35 @@ export interface components {
         AgentFilter: string;
         /** @description json for a JSON array of records, csv for a CSV file with one line per action. */
         AuditFormat: "json" | "csv";
+        IncidentID: string;
+        PersonID: string;
+        InvitationID: string;
+        /** @description Only the incidents in this state. */
+        IncidentStateFilter: components["schemas"]["IncidentState"];
+        /** @description The cursor of an action. The page holds the actions older than it. */
+        Before: string;
+        /** @description The cursor of an action. The page holds the actions more recent than it, at most 15 minutes back. */
+        After: string;
+        /** @description Only the actions that received this verdict. */
+        VerdictFilter: components["schemas"]["Verdict"];
+        /** @description Only the actions whose tool name starts with this text. */
+        ToolFilter: string;
+        /** @description The start of the period, included. */
+        PeriodStart: string;
+        /** @description The end of the period, excluded. */
+        PeriodEnd: string;
+        /** @description The page of the dashboard the browser opens after signing in, a path that starts with a single slash. */
+        ReturnTo: string;
+        /** @description The authorization code the provider gives back. */
+        OAuthCode: string;
+        /** @description The state the service gave to the provider, compared with its cookie. */
+        OAuthState: string;
+        /** @description The error the provider gives back when the person refused or the sign-in failed. */
+        OAuthError: string;
+        /** @description The organization the Slack workspace joins. */
+        OrganizationQuery: string;
+        /** @description The signature of the event, ts=<seconds>;h1=<HMAC-SHA256 in hexadecimal>. */
+        PaddleSignature: string;
     };
     requestBodies: never;
     headers: never;
@@ -1146,6 +2363,7 @@ export interface operations {
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ActionReused"];
             500: components["responses"]["InternalError"];
@@ -1174,6 +2392,7 @@ export interface operations {
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["SlowDown"];
             500: components["responses"]["InternalError"];
@@ -1210,6 +2429,7 @@ export interface operations {
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             500: components["responses"]["InternalError"];
@@ -1241,6 +2461,7 @@ export interface operations {
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -1270,6 +2491,7 @@ export interface operations {
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
             413: components["responses"]["PayloadTooLarge"];
             500: components["responses"]["InternalError"];
@@ -1297,6 +2519,7 @@ export interface operations {
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };
@@ -1321,6 +2544,7 @@ export interface operations {
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };
@@ -1351,6 +2575,7 @@ export interface operations {
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             413: components["responses"]["PayloadTooLarge"];
@@ -1384,6 +2609,7 @@ export interface operations {
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };
@@ -1410,6 +2636,7 @@ export interface operations {
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
@@ -1436,6 +2663,7 @@ export interface operations {
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };
@@ -1462,6 +2690,7 @@ export interface operations {
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };
@@ -1492,6 +2721,7 @@ export interface operations {
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             413: components["responses"]["PayloadTooLarge"];
             500: components["responses"]["InternalError"];
@@ -1522,6 +2752,7 @@ export interface operations {
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -1551,6 +2782,7 @@ export interface operations {
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             413: components["responses"]["PayloadTooLarge"];
             500: components["responses"]["InternalError"];
         };
@@ -1577,6 +2809,7 @@ export interface operations {
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };
@@ -1601,6 +2834,7 @@ export interface operations {
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };
@@ -1631,6 +2865,7 @@ export interface operations {
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             413: components["responses"]["PayloadTooLarge"];
             500: components["responses"]["InternalError"];
@@ -1661,6 +2896,7 @@ export interface operations {
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -1690,6 +2926,7 @@ export interface operations {
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
             413: components["responses"]["PayloadTooLarge"];
             500: components["responses"]["InternalError"];
@@ -1717,6 +2954,7 @@ export interface operations {
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };
@@ -1741,6 +2979,7 @@ export interface operations {
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
@@ -1772,6 +3011,7 @@ export interface operations {
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             413: components["responses"]["PayloadTooLarge"];
@@ -1805,6 +3045,7 @@ export interface operations {
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -1834,6 +3075,7 @@ export interface operations {
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             413: components["responses"]["PayloadTooLarge"];
@@ -1947,6 +3189,7 @@ export interface operations {
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["Unavailable"];
         };
@@ -1973,9 +3216,1260 @@ export interface operations {
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["Unavailable"];
+        };
+    };
+    quarantineAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: components["parameters"]["AgentID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["IncidentRequest"];
+            };
+        };
+        responses: {
+            /** @description The incident that quarantines the agent. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Incident"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    releaseAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: components["parameters"]["AgentID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["IncidentRequest"];
+            };
+        };
+        responses: {
+            /** @description The lifted incident. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Incident"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    disableAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: components["parameters"]["AgentID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["IncidentRequest"];
+            };
+        };
+        responses: {
+            /** @description The incident that disables the agent. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Incident"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            413: components["responses"]["PayloadTooLarge"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    enableAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: components["parameters"]["AgentID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["IncidentRequest"];
+            };
+        };
+        responses: {
+            /** @description The lifted incident. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Incident"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    revokeAgentKeys: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: components["parameters"]["AgentID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["IncidentRequest"];
+            };
+        };
+        responses: {
+            /** @description The incident of the revocation. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Incident"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            413: components["responses"]["PayloadTooLarge"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    rotateAgentKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: components["parameters"]["AgentID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["IncidentRequest"];
+            };
+        };
+        responses: {
+            /** @description The incident of the change, and the new key. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RotatedAgentKey"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            413: components["responses"]["PayloadTooLarge"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listIncidents: {
+        parameters: {
+            query?: {
+                /** @description Only the incidents in this state. */
+                state?: components["parameters"]["IncidentStateFilter"];
+                /** @description Only the actions of this agent. */
+                agent_id?: components["parameters"]["AgentFilter"];
+                /** @description The number of items in the page, from 1 to 100. */
+                limit?: components["parameters"]["Limit"];
+                /** @description The identifier of the last item of the previous page. */
+                starting_after?: components["parameters"]["StartingAfter"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of incidents. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IncidentList"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getIncident: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                incident_id: components["parameters"]["IncidentID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The incident. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Incident"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listActions: {
+        parameters: {
+            query?: {
+                /** @description The number of items in the page, from 1 to 100. */
+                limit?: components["parameters"]["Limit"];
+                /** @description The cursor of an action. The page holds the actions older than it. */
+                before?: components["parameters"]["Before"];
+                /** @description The cursor of an action. The page holds the actions more recent than it, at most 15 minutes back. */
+                after?: components["parameters"]["After"];
+                /** @description Only the actions of this agent. */
+                agent_id?: components["parameters"]["AgentFilter"];
+                /** @description Only the actions that received this verdict. */
+                verdict?: components["parameters"]["VerdictFilter"];
+                /** @description Only the actions whose tool name starts with this text. */
+                tool?: components["parameters"]["ToolFilter"];
+                /** @description The start of the period, included. */
+                from?: components["parameters"]["PeriodStart"];
+                /** @description The end of the period, excluded. */
+                to?: components["parameters"]["PeriodEnd"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of actions. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionList"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    getCosts: {
+        parameters: {
+            query: {
+                /** @description The start of the period, included. */
+                from: components["parameters"]["From"];
+                /** @description The end of the period, excluded. */
+                to: components["parameters"]["To"];
+                /** @description Only the actions of this agent. */
+                agent_id?: components["parameters"]["AgentFilter"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The costs of the period. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CostReport"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    getAgentActivity: {
+        parameters: {
+            query: {
+                /** @description The start of the period, included. */
+                from: components["parameters"]["From"];
+                /** @description The end of the period, excluded. */
+                to: components["parameters"]["To"];
+            };
+            header?: never;
+            path: {
+                agent_id: components["parameters"]["AgentID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The activity of the agent. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentActivity"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    startGoogleSignIn: {
+        parameters: {
+            query?: {
+                /** @description The page of the dashboard the browser opens after signing in, a path that starts with a single slash. */
+                return_to?: components["parameters"]["ReturnTo"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            302: components["responses"]["Redirect"];
+            400: components["responses"]["InvalidRequest"];
+        };
+    };
+    finishGoogleSignIn: {
+        parameters: {
+            query?: {
+                /** @description The authorization code the provider gives back. */
+                code?: components["parameters"]["OAuthCode"];
+                /** @description The state the service gave to the provider, compared with its cookie. */
+                state?: components["parameters"]["OAuthState"];
+                /** @description The error the provider gives back when the person refused or the sign-in failed. */
+                error?: components["parameters"]["OAuthError"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            302: components["responses"]["Redirect"];
+            400: components["responses"]["InvalidRequest"];
+        };
+    };
+    startGitHubSignIn: {
+        parameters: {
+            query?: {
+                /** @description The page of the dashboard the browser opens after signing in, a path that starts with a single slash. */
+                return_to?: components["parameters"]["ReturnTo"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            302: components["responses"]["Redirect"];
+            400: components["responses"]["InvalidRequest"];
+        };
+    };
+    finishGitHubSignIn: {
+        parameters: {
+            query?: {
+                /** @description The authorization code the provider gives back. */
+                code?: components["parameters"]["OAuthCode"];
+                /** @description The state the service gave to the provider, compared with its cookie. */
+                state?: components["parameters"]["OAuthState"];
+                /** @description The error the provider gives back when the person refused or the sign-in failed. */
+                error?: components["parameters"]["OAuthError"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            302: components["responses"]["Redirect"];
+            400: components["responses"]["InvalidRequest"];
+        };
+    };
+    sendEmailLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailLinkRequest"];
+            };
+        };
+        responses: {
+            /** @description The link leaves when the address may receive one. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["InvalidRequest"];
+            403: components["responses"]["Forbidden"];
+            413: components["responses"]["PayloadTooLarge"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    verifyEmailLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailLinkVerification"];
+            };
+        };
+        responses: {
+            /** @description The session is open. The cookie __Host-paidwen_session carries it. */
+            200: {
+                headers: {
+                    /** @description The session cookie. */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Me"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            403: components["responses"]["Forbidden"];
+            413: components["responses"]["PayloadTooLarge"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The person and their organizations. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Me"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    signOut: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The session is closed, and the cookie is removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    signOutEverywhere: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every session of the person is closed, and the cookie is removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createOrganization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrganizationCreate"];
+            };
+        };
+        responses: {
+            /** @description The organization is created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Membership"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            413: components["responses"]["PayloadTooLarge"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    acceptInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvitationAcceptance"];
+            };
+        };
+        responses: {
+            /** @description The person joined the organization. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Membership"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getOrganization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The organization. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Organization"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateOrganization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/merge-patch+json": components["schemas"]["OrganizationPatch"];
+            };
+        };
+        responses: {
+            /** @description The changed organization. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Organization"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            413: components["responses"]["PayloadTooLarge"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listMembers: {
+        parameters: {
+            query?: {
+                /** @description The number of items in the page, from 1 to 100. */
+                limit?: components["parameters"]["Limit"];
+                /** @description The identifier of the last item of the previous page. */
+                starting_after?: components["parameters"]["StartingAfter"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of people. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberList"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    removeMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                person_id: components["parameters"]["PersonID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The person left the organization. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                person_id: components["parameters"]["PersonID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/merge-patch+json": components["schemas"]["MemberPatch"];
+            };
+        };
+        responses: {
+            /** @description The person with their new role. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Member"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listInvitations: {
+        parameters: {
+            query?: {
+                /** @description The number of items in the page, from 1 to 100. */
+                limit?: components["parameters"]["Limit"];
+                /** @description The identifier of the last item of the previous page. */
+                starting_after?: components["parameters"]["StartingAfter"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of invitations. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationList"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvitationCreate"];
+            };
+        };
+        responses: {
+            /** @description The invitation left. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Invitation"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    revokeInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invitation_id: components["parameters"]["InvitationID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The invitation no longer works. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listAdminKeys: {
+        parameters: {
+            query?: {
+                /** @description The number of items in the page, from 1 to 100. */
+                limit?: components["parameters"]["Limit"];
+                /** @description The identifier of the last item of the previous page. */
+                starting_after?: components["parameters"]["StartingAfter"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of admin keys, without their value. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminKeyList"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createAdminKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The admin key is created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedAdminKey"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    revokeAdminKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key_id: components["parameters"]["KeyID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The admin key is revoked. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getBilling: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The plan and the usage. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Billing"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateBilling: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/merge-patch+json": components["schemas"]["BillingPatch"];
+            };
+        };
+        responses: {
+            /** @description The plan and the usage, with the new cap. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Billing"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createCheckout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckoutRequest"];
+            };
+        };
+        responses: {
+            /** @description The transaction to pay. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Checkout"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    syncBilling: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BillingSync"];
+            };
+        };
+        responses: {
+            /** @description The plan and the usage after the payment. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Billing"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            413: components["responses"]["PayloadTooLarge"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    changePlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanChange"];
+            };
+        };
+        responses: {
+            /** @description The plan and the usage after the change. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Billing"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    cancelSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The plan and the usage, with the scheduled cancellation. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Billing"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    resumeSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The plan and the usage, without the scheduled cancellation. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Billing"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    createBillingPortal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The address of the portal, valid for a short time. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingPortal"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    receivePaddleWebhook: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The signature of the event, ts=<seconds>;h1=<HMAC-SHA256 in hexadecimal>. */
+                "Paddle-Signature": components["parameters"]["PaddleSignature"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description The event is applied, or was already applied. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            413: components["responses"]["PayloadTooLarge"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getSlack: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The connection. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SlackConnection"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    disconnectSlack: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The workspace is disconnected. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    installSlack: {
+        parameters: {
+            query: {
+                /** @description The organization the Slack workspace joins. */
+                organization: components["parameters"]["OrganizationQuery"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            302: components["responses"]["Redirect"];
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    finishSlackInstall: {
+        parameters: {
+            query?: {
+                /** @description The authorization code the provider gives back. */
+                code?: components["parameters"]["OAuthCode"];
+                /** @description The state the service gave to the provider, compared with its cookie. */
+                state?: components["parameters"]["OAuthState"];
+                /** @description The error the provider gives back when the person refused or the sign-in failed. */
+                error?: components["parameters"]["OAuthError"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            302: components["responses"]["Redirect"];
+            400: components["responses"]["InvalidRequest"];
         };
     };
 }
