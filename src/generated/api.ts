@@ -2069,6 +2069,8 @@ export interface components {
         Subscription: {
             status: components["schemas"]["SubscriptionStatus"];
             interval: components["schemas"]["BillingInterval"];
+            /** @description The Paddle customer used to initialize Paddle Retain for the signed-in organization. */
+            paddle_customer_id: string;
             /** Format: date-time */
             current_period_start: string;
             /** Format: date-time */
