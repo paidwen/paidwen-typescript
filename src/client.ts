@@ -1,17 +1,25 @@
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { context, type Span } from "@opentelemetry/api";
-import { isTracingSuppressed, suppressTracing } from "@opentelemetry/core";
+import { isTracingSuppressed } from "@opentelemetry/core";
 import type { SpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { install } from "./capture.ts";
 import {
   type ContextOptions,
   insideAction,
+  quiet,
   scope,
-  silently,
   takeActionId,
   withContext,
 } from "./context.ts";
+import {
+  type Credentials,
+  FederatedCredentials,
+  type IdentityToken,
+  identityTokenFile,
+  KeyCredentials,
+  Unavailable,
+} from "./credentials.ts";
 import { DeniedError, PaidwenError, PendingError, RequestError, reasonOf } from "./errors.ts";
 import { matches } from "./http.ts";
 import { finish, Journal, started, traceparent } from "./journal.ts";
@@ -41,6 +49,8 @@ export interface Wait {
 
 export interface PaidwenOptions {
   apiKey?: string;
+  identityTokenFile?: string;
+  identityToken?: IdentityToken;
   baseUrl?: string;
   timeoutMs?: number;
   onUnavailable?: Fallback;
@@ -65,12 +75,14 @@ export interface McpClient {
 
 export type McpTarget = McpClient | (abstract new (...args: never[]) => McpClient);
 
-const VERSION = "0.8.1";
+const VERSION = "0.9.0";
 const DEFAULT_BASE_URL = "https://api.paidwen.com";
 const QUOTA_EXCEEDED = "https://paidwen.com/problems/quota-exceeded";
 const DEFAULT_TIMEOUT_MS = 3000;
 const SLOW_DOWN_SECONDS = 5;
 const WAIT_GRACE_SECONDS = 60;
+const MISSING_IDENTITY =
+  "Paidwen needs an agent key or an identity token: pass apiKey, identityTokenFile or identityToken, or set PAIDWEN_API_KEY or PAIDWEN_IDENTITY_TOKEN_FILE.";
 const CAPTURED = Symbol.for("paidwen.mcp");
 const HTTP_CAPTURED = Symbol.for("paidwen.http");
 const processState = globalThis as unknown as Record<symbol, true | undefined>;
@@ -85,12 +97,8 @@ function decidedAt(decision: Decision): number {
   return Number.isNaN(at) ? Date.now() : at;
 }
 
-function quiet<T>(fn: () => T): T {
-  return silently(() => context.with(suppressTracing(context.active()), fn));
-}
-
 export class Paidwen {
-  readonly #apiKey: string;
+  readonly #credentials: Credentials;
   readonly #base: string;
   readonly #timeoutMs: number;
   readonly #onUnavailable: Fallback;
@@ -101,10 +109,6 @@ export class Paidwen {
   #releaseHttp: (() => void) | undefined;
 
   constructor(options: PaidwenOptions = {}) {
-    const apiKey = options.apiKey ?? environment("PAIDWEN_API_KEY");
-    if (!apiKey) {
-      throw new PaidwenError("Paidwen needs an agent key: pass apiKey or set PAIDWEN_API_KEY.");
-    }
     const onUnavailable = options.onUnavailable ?? "block";
     if (onUnavailable !== "allow" && onUnavailable !== "block") {
       throw new PaidwenError('onUnavailable must be "allow" or "block".');
@@ -118,16 +122,17 @@ export class Paidwen {
       throw new PaidwenError("timeoutMs must be a positive number of milliseconds.");
     }
     const baseUrl = options.baseUrl ?? environment("PAIDWEN_BASE_URL") ?? DEFAULT_BASE_URL;
-    this.#apiKey = apiKey;
     this.#base = baseUrl.replace(/\/+$/, "");
     this.#timeoutMs = timeoutMs;
     this.#onUnavailable = onUnavailable;
     this.#onPending = onPending;
     this.#onWait = options.onWait;
     this.#fetch = options.fetch ?? globalThis.fetch;
+    this.#credentials = credentialsOf(options, this.#base, this.#fetch, timeoutMs);
+    const credentials = this.#credentials;
     this.#journal = new Journal({
       endpoint: `${this.#base}/v1/traces`,
-      apiKey,
+      authorization: () => credentials.authorization(),
       enabled: options.journal ?? true,
       version: VERSION,
     });
@@ -150,8 +155,19 @@ export class Paidwen {
     if (Object.keys(known).length > 0 || input.context) {
       request.context = { ...known, ...input.context };
     }
+    return this.#send(request, span, true);
+  }
+
+  async #send(request: DecisionRequest, span: Span | undefined, retry: boolean): Promise<Decision> {
+    let authorization: string;
+    try {
+      authorization = await this.#credentials.authorization();
+    } catch (error) {
+      if (error instanceof Unavailable) return this.#fallback(request, error.message, error.reason);
+      throw error;
+    }
     const headers: Record<string, string> = {
-      authorization: `Bearer ${this.#apiKey}`,
+      authorization,
       "content-type": "application/json",
       accept: "application/json",
     };
@@ -172,6 +188,11 @@ export class Paidwen {
     if (response.status >= 500) {
       const problem = await problemOf(response);
       return this.#fallback(request, unavailable(response.status, problem), reasonOf(problem));
+    }
+    if (response.status === 401 && retry && this.#credentials.federated) {
+      response.body?.cancel().catch(() => undefined);
+      this.#credentials.reject(authorization);
+      return this.#send(request, span, false);
     }
     if (!response.ok) {
       throw new RequestError(response.status, await problemOf(response));
@@ -225,17 +246,29 @@ export class Paidwen {
     }
   }
 
-  async #poll(id: string): Promise<Polled> {
+  async #poll(id: string, retry = true): Promise<Polled> {
+    let authorization: string;
+    try {
+      authorization = await this.#credentials.authorization();
+    } catch (error) {
+      if (error instanceof Unavailable) return { kind: "unavailable" };
+      throw error;
+    }
     let response: Response;
     try {
       response = await quiet(() =>
         this.#fetch(`${this.#base}/v1/approvals/${id}`, {
-          headers: { authorization: `Bearer ${this.#apiKey}`, accept: "application/json" },
+          headers: { authorization, accept: "application/json" },
           signal: AbortSignal.timeout(this.#timeoutMs),
         }),
       );
     } catch {
       return { kind: "unavailable" };
+    }
+    if (response.status === 401 && retry && this.#credentials.federated) {
+      response.body?.cancel().catch(() => undefined);
+      this.#credentials.reject(authorization);
+      return this.#poll(id, false);
     }
     if (response.status === 429) {
       response.body?.cancel().catch(() => undefined);
@@ -490,6 +523,48 @@ function unavailable(status: number, problem: Problem | undefined): string {
 
 function messageOf(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause);
+}
+
+function credentialsOf(
+  options: PaidwenOptions,
+  base: string,
+  transport: typeof fetch,
+  timeoutMs: number,
+): Credentials {
+  const given = [options.apiKey, options.identityTokenFile, options.identityToken].filter(
+    (value) => value !== undefined,
+  );
+  if (given.length > 1) {
+    throw new PaidwenError("Pass only one of apiKey, identityTokenFile and identityToken.");
+  }
+  const federated = (identityToken: IdentityToken) =>
+    new FederatedCredentials({ identityToken, base, fetch: transport, timeoutMs });
+  if (options.identityTokenFile !== undefined) {
+    if (!options.identityTokenFile) {
+      throw new PaidwenError("identityTokenFile must name the file of the identity token.");
+    }
+    return federated(identityTokenFile(options.identityTokenFile));
+  }
+  if (options.identityToken !== undefined) {
+    if (typeof options.identityToken !== "function") {
+      throw new PaidwenError("identityToken must be a function that returns the identity token.");
+    }
+    return federated(options.identityToken);
+  }
+  if (options.apiKey !== undefined) {
+    if (!options.apiKey) throw new PaidwenError(MISSING_IDENTITY);
+    return new KeyCredentials(options.apiKey);
+  }
+  const apiKey = environment("PAIDWEN_API_KEY");
+  const tokenFile = environment("PAIDWEN_IDENTITY_TOKEN_FILE");
+  if (apiKey && tokenFile) {
+    throw new PaidwenError(
+      "Both PAIDWEN_API_KEY and PAIDWEN_IDENTITY_TOKEN_FILE are set. Keep only one of them.",
+    );
+  }
+  if (apiKey) return new KeyCredentials(apiKey);
+  if (tokenFile) return federated(identityTokenFile(tokenFile));
+  throw new PaidwenError(MISSING_IDENTITY);
 }
 
 function environment(name: string): string | undefined {

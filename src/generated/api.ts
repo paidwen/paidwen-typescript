@@ -83,6 +83,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/oauth/token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Exchange the token a platform signed for an agent token, following OAuth 2.0 Token Exchange.
+         * @description The subject token is a JWT that a platform signed for the agent, such as the projected token of a Kubernetes service account, the OIDC token of a GitHub Actions job or the web identity token of AWS. Its audience is the audience of the organization. The service verifies its signature, its issuer, its audience and its expiry, then tries the enabled trust rules of the organization for its issuer, in the order of their creation. The first rule whose condition accepts the token gives the name of the agent. The service finds the agent of this name, or creates it, and answers with an agent token valid for 15 minutes, which the SDK sends in place of a key. Errors follow RFC 6749.
+         */
+        post: operations["exchangeToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/agents": {
         parameters: {
             query?: never;
@@ -169,6 +189,54 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/v1/trust-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the trust rules of the organization, in the order of their creation. */
+        get: operations["listTrustRules"];
+        put?: never;
+        /**
+         * Write a trust rule.
+         * @description The service compiles the condition and the agent name with CEL before writing them. A condition that does not return a boolean, or a name that does not return a string, receives 400 with the error of CEL.
+         */
+        post: operations["createTrustRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/trust-rules/{trust_rule_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                trust_rule_id: components["parameters"]["TrustRuleID"];
+            };
+            cookie?: never;
+        };
+        /** Read a trust rule. */
+        get: operations["getTrustRule"];
+        put?: never;
+        post?: never;
+        /**
+         * Remove a trust rule.
+         * @description The agents of the rule stay in the registry with their history, without a rule, and their agent tokens stop working within one second. Another rule can adopt them when they hold no active key.
+         */
+        delete: operations["deleteTrustRule"];
+        options?: never;
+        head?: never;
+        /**
+         * Change a trust rule, following JSON Merge Patch.
+         * @description An absent field does not change. A field set to null is removed. The environment of a trust rule never changes. Setting enabled to false refuses every exchange of the rule, and the agent tokens of its agents stop working within one second.
+         */
+        patch: operations["updateTrustRule"];
         trace?: never;
     };
     "/v1/agents/{agent_id}/permissions": {
@@ -1418,6 +1486,11 @@ export interface components {
             record_content: boolean;
             status: components["schemas"]["AgentStatus"];
             spent?: components["schemas"]["AgentSpent"];
+            /**
+             * Format: uuid
+             * @description The trust rule that gives the agent its identity, when the agent proves it with the tokens of its platform.
+             */
+            trust_rule_id?: string;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -1492,6 +1565,119 @@ export interface components {
         AgentKeyList: {
             data: components["schemas"]["AgentKey"][];
             has_more: boolean;
+        };
+        /** @description A public key of RFC 7517. */
+        JsonWebKey: {
+            /** @enum {string} */
+            kty: "RSA" | "EC" | "OKP";
+        } & {
+            [key: string]: unknown;
+        };
+        /** @description The public keys of an issuer, in the JSON Web Key Set format of RFC 7517. */
+        JsonWebKeySet: {
+            keys: components["schemas"]["JsonWebKey"][];
+        };
+        /** @description The issuer the rule trusts, compared exactly with the iss claim of the token, for example https://token.actions.githubusercontent.com. */
+        TrustRuleIssuer: string;
+        /** @description A CEL condition on the claims variable, the content of the token. The rule accepts a token when the condition returns true, for example claims.repository == "acme/billing-agent". */
+        TrustRuleCondition: string;
+        /** @description A CEL expression on the claims variable that returns the name of the agent, from 1 to 128 characters, for example claims.repository. */
+        TrustRuleAgentName: string;
+        TrustRule: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            issuer: components["schemas"]["TrustRuleIssuer"];
+            jwks?: components["schemas"]["JsonWebKeySet"];
+            condition: components["schemas"]["TrustRuleCondition"];
+            agent_name: components["schemas"]["TrustRuleAgentName"];
+            environment: components["schemas"]["Environment"];
+            team?: components["schemas"]["TeamHandle"];
+            /** @description The email of the member who answers for the agents of the rule. */
+            owner?: string;
+            /** @description Whether the rule accepts tokens. A disabled rule refuses every exchange, and its agents no longer pass the decision point. */
+            enabled: boolean;
+            /**
+             * Format: int32
+             * @description The number of agents of the rule.
+             */
+            agents: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        TrustRuleCreate: {
+            name: string;
+            issuer: components["schemas"]["TrustRuleIssuer"];
+            jwks?: components["schemas"]["JsonWebKeySet"];
+            condition: components["schemas"]["TrustRuleCondition"];
+            agent_name: components["schemas"]["TrustRuleAgentName"];
+            environment: components["schemas"]["Environment"];
+            team?: components["schemas"]["TeamHandle"];
+            /**
+             * Format: email
+             * @description The email of a member of the organization, who answers for the agents of the rule.
+             */
+            owner?: string;
+            /** @default true */
+            enabled: boolean;
+        };
+        TrustRulePatch: {
+            name?: string;
+            issuer?: components["schemas"]["TrustRuleIssuer"];
+            /** @description The public keys of the issuer. Null removes them, and the service then reads the keys at the address of the issuer. */
+            jwks?: {
+                keys: components["schemas"]["JsonWebKey"][];
+            } | null;
+            condition?: components["schemas"]["TrustRuleCondition"];
+            agent_name?: components["schemas"]["TrustRuleAgentName"];
+            /** @description The handle of a team of the organization. */
+            team?: string | null;
+            /**
+             * Format: email
+             * @description The email of a member of the organization, who answers for the agents of the rule.
+             */
+            owner?: string | null;
+            enabled?: boolean;
+        };
+        TrustRuleList: {
+            data: components["schemas"]["TrustRule"][];
+            has_more: boolean;
+        };
+        /** @description The form of a token exchange request, following RFC 8693. */
+        TokenExchangeRequest: {
+            /** @enum {string} */
+            grant_type: "urn:ietf:params:oauth:grant-type:token-exchange";
+            /** @description The token the platform signed for the agent, with the audience of the organization. */
+            subject_token: string;
+            /** @enum {string} */
+            subject_token_type: "urn:ietf:params:oauth:token-type:jwt" | "urn:ietf:params:oauth:token-type:id_token";
+            /** @enum {string} */
+            requested_token_type?: "urn:ietf:params:oauth:token-type:access_token";
+            /** @description When present, https://api.paidwen.com. */
+            audience?: string;
+            /** @description When present, https://api.paidwen.com. */
+            resource?: string;
+        };
+        TokenExchangeResponse: {
+            /** @description The agent token, a JWT that follows RFC 9068. The SDK sends it in place of the key of the agent. */
+            access_token: string;
+            /** @enum {string} */
+            issued_token_type: "urn:ietf:params:oauth:token-type:access_token";
+            /** @enum {string} */
+            token_type: "Bearer";
+            /**
+             * Format: int32
+             * @description The seconds before the agent token expires.
+             */
+            expires_in: number;
+        };
+        /** @description An error of the token endpoint, following RFC 6749. */
+        TokenError: {
+            /** @enum {string} */
+            error: "invalid_request" | "invalid_target" | "unsupported_grant_type" | "temporarily_unavailable" | "server_error";
+            error_description?: string;
         };
         PermissionEntry: {
             /** @description The pattern of the tool name. An asterisk stands for any sequence of characters. */
@@ -1762,6 +1948,8 @@ export interface components {
              * @description The open incident that quarantines or disables the agent.
              */
             incident_id?: string;
+            /** @description The trust rule whose agent tokens identify the agent. */
+            trust_rule_id?: string;
         };
         /** @description The limits of the agent, in billionths of a US dollar. */
         SnapshotBudget: {
@@ -1806,6 +1994,8 @@ export interface components {
             usage_limit?: number;
             approval_groups?: components["schemas"]["SnapshotApprovalGroup"][];
             approval_defaults?: components["schemas"]["SnapshotApprovalDefaults"];
+            /** @description The identifiers of the enabled trust rules. The agent token of an agent passes only while its rule is in this list. */
+            trust_rules?: string[];
             agents: components["schemas"]["SnapshotAgent"][];
             rules: components["schemas"]["SnapshotRule"][];
         };
@@ -2069,6 +2259,8 @@ export interface components {
             name: string;
             plan: components["schemas"]["PlanID"];
             incident_contacts: components["schemas"]["IncidentContacts"];
+            /** @description The audience a platform writes in the tokens it signs for the agents of the organization, https://api.paidwen.com/organizations/ followed by the identifier of the organization. */
+            audience: string;
             /** Format: date-time */
             created_at: string;
         };
@@ -2239,7 +2431,7 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description The key is missing, malformed or unknown, or it opens another door. */
+        /** @description The key or the agent token is missing, malformed, unknown or expired, it opens another door, or the trust rule of the agent token is disabled or removed. */
         Unauthorized: {
             headers: {
                 /** @description The authentication scheme, Bearer. */
@@ -2352,6 +2544,7 @@ export interface components {
         StartingAfter: string;
         AgentID: string;
         KeyID: string;
+        TrustRuleID: string;
         RuleID: string;
         GroupID: string;
         TeamHandle: components["schemas"]["TeamHandle"];
@@ -2525,6 +2718,59 @@ export interface operations {
             415: components["responses"]["UnsupportedMediaType"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["Unavailable"];
+        };
+    };
+    exchangeToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/x-www-form-urlencoded": components["schemas"]["TokenExchangeRequest"];
+            };
+        };
+        responses: {
+            /** @description The agent token. */
+            200: {
+                headers: {
+                    /** @description Always no-store. */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenExchangeResponse"];
+                };
+            };
+            /** @description The request is malformed, or the subject token is refused. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenError"];
+                };
+            };
+            /** @description The service failed to answer. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenError"];
+                };
+            };
+            /** @description The service cannot read the keys of the issuer or sign the agent token yet. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenError"];
+                };
+            };
         };
     };
     listAgents: {
@@ -2758,6 +3004,152 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listTrustRules: {
+        parameters: {
+            query?: {
+                /** @description The number of items in the page, from 1 to 100. */
+                limit?: components["parameters"]["Limit"];
+                /** @description The identifier of the last item of the previous page. */
+                starting_after?: components["parameters"]["StartingAfter"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of trust rules, with the number of agents of each. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrustRuleList"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createTrustRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrustRuleCreate"];
+            };
+        };
+        responses: {
+            /** @description The trust rule is written. */
+            201: {
+                headers: {
+                    /** @description The address of the trust rule. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrustRule"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            413: components["responses"]["PayloadTooLarge"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getTrustRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                trust_rule_id: components["parameters"]["TrustRuleID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The trust rule. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrustRule"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    deleteTrustRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                trust_rule_id: components["parameters"]["TrustRuleID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The trust rule is removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateTrustRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                trust_rule_id: components["parameters"]["TrustRuleID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/merge-patch+json": components["schemas"]["TrustRulePatch"];
+            };
+        };
+        responses: {
+            /** @description The changed trust rule. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrustRule"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            413: components["responses"]["PayloadTooLarge"];
             500: components["responses"]["InternalError"];
         };
     };

@@ -54,6 +54,18 @@ describe("the journal of the SDK", () => {
     await paidwen.shutdown();
   });
 
+  it("sends the spans with the agent token of the identity federation", async () => {
+    const paidwen = new Paidwen({ identityToken: () => "platform-token", baseUrl: fake.url });
+    await paidwen.tool("payments.refund", async () => "ok")({ amount: 12 });
+    await paidwen.flush();
+    await until("the spans", () => fake.spans().length === 1);
+    assert.equal(fake.decisions[0]?.headers.authorization, "Bearer agent-token-1");
+    assert.equal(fake.traces[0]?.headers.authorization, "Bearer agent-token-1");
+    assert.equal(fake.exchanges.length, 1);
+    assert.equal(fake.exchanges[0]?.get("subject_token"), "platform-token");
+    await paidwen.shutdown();
+  });
+
   it("sends a model call at once, and its next question waits for it", async () => {
     const paidwen = new Paidwen({ apiKey: "pw_test_key", baseUrl: fake.url });
     const provider = new BasicTracerProvider({ spanProcessors: [paidwen.spanProcessor()] });

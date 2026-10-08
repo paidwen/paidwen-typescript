@@ -1,4 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { context } from "@opentelemetry/api";
+import { suppressTracing } from "@opentelemetry/core";
 
 interface PendingAction {
   id: string;
@@ -47,4 +49,8 @@ export function silently<T>(fn: () => T): T {
 
 export function insideAction<T>(fn: () => T): T {
   return within({ inAction: true }, fn);
+}
+
+export function quiet<T>(fn: () => T): T {
+  return silently(() => context.with(suppressTracing(context.active()), fn));
 }

@@ -52,7 +52,7 @@ export function isModelCall(span: ReadableSpan): boolean {
 
 export interface JournalOptions {
   endpoint: string;
-  apiKey: string;
+  authorization: () => Promise<string>;
   enabled: boolean;
   version: string;
 }
@@ -69,7 +69,13 @@ export class Journal {
       this.#exporter = new SilentExporter(
         new OTLPTraceExporter({
           url: options.endpoint,
-          headers: { authorization: `Bearer ${options.apiKey}` },
+          headers: async (): Promise<Record<string, string>> => {
+            try {
+              return { authorization: await options.authorization() };
+            } catch {
+              return {};
+            }
+          },
           timeoutMillis: 10_000,
         }),
       );

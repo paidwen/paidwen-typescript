@@ -11,6 +11,7 @@ export type {
 } from "./client.ts";
 export { Paidwen } from "./client.ts";
 export type { ContextOptions } from "./context.ts";
+export type { IdentityToken } from "./credentials.ts";
 export { DeniedError, PaidwenError, PendingError, RequestError } from "./errors.ts";
 export type {
   ActionContext,

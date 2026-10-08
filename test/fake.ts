@@ -35,6 +35,7 @@ export class FakePaidwen {
   readonly decisions: Recorded[] = [];
   readonly polls: Recorded[] = [];
   readonly traces: Recorded[] = [];
+  readonly exchanges: URLSearchParams[] = [];
   answer: (request: DecisionRequest) => Decision = (request) => decision(request, "allow");
   script: Poll[] = [];
   #server: Server | undefined;
@@ -46,6 +47,19 @@ export class FakePaidwen {
       request.on("data", (chunk: Buffer) => chunks.push(chunk));
       request.on("end", () => {
         const text = Buffer.concat(chunks).toString("utf8");
+        if (request.url === "/v1/oauth/token") {
+          this.exchanges.push(new URLSearchParams(text));
+          response.setHeader("content-type", "application/json");
+          response.end(
+            JSON.stringify({
+              access_token: `agent-token-${this.exchanges.length}`,
+              issued_token_type: "urn:ietf:params:oauth:token-type:access_token",
+              token_type: "Bearer",
+              expires_in: 900,
+            }),
+          );
+          return;
+        }
         const body = text ? JSON.parse(text) : undefined;
         const recorded = {
           path: request.url ?? "",

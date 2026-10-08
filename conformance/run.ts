@@ -3,7 +3,8 @@ import { type DecisionRequest, type Fallback, Paidwen, RequestError } from "../s
 
 interface Step {
   name: string;
-  api_key: string;
+  api_key?: string;
+  identity_token_file?: string;
   request: DecisionRequest;
   timeout_ms?: number;
   on_unavailable?: Fallback;
@@ -22,7 +23,10 @@ const plan = JSON.parse(readFileSync(planPath, "utf8")) as Plan;
 const results = [];
 for (const step of plan.steps) {
   const paidwen = new Paidwen({
-    apiKey: step.api_key,
+    ...(step.api_key === undefined ? {} : { apiKey: step.api_key }),
+    ...(step.identity_token_file === undefined
+      ? {}
+      : { identityTokenFile: step.identity_token_file }),
     baseUrl: plan.base_url,
     ...(step.timeout_ms === undefined ? {} : { timeoutMs: step.timeout_ms }),
     ...(step.on_unavailable === undefined ? {} : { onUnavailable: step.on_unavailable }),
