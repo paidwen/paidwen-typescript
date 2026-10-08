@@ -239,6 +239,45 @@ export interface paths {
         patch: operations["updateRule"];
         trace?: never;
     };
+    "/v1/teams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the teams of the organization, in the order of their handles. */
+        get: operations["listTeams"];
+        put?: never;
+        /** Create a team. Its handle never changes, and the rules compare it. */
+        post: operations["createTeam"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/teams/{handle}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                handle: components["parameters"]["TeamHandle"];
+            };
+            cookie?: never;
+        };
+        /** Read a team. */
+        get: operations["getTeam"];
+        put?: never;
+        post?: never;
+        /** Remove a team that holds no agent. */
+        delete: operations["deleteTeam"];
+        options?: never;
+        head?: never;
+        /** Rename a team, following JSON Merge Patch. The handle stays. */
+        patch: operations["updateTeam"];
+        trace?: never;
+    };
     "/v1/approval-groups": {
         parameters: {
             query?: never;
@@ -1366,8 +1405,9 @@ export interface components {
             id: string;
             /** @description The identity of the agent, unique in the organization, for example agent-support-prod. */
             name: string;
+            /** @description The email of the member of the organization who answers for the agent. */
             owner?: string;
-            team?: string;
+            team?: components["schemas"]["TeamHandle"];
             description?: string;
             model_provider?: string;
             environment: components["schemas"]["Environment"];
@@ -1385,8 +1425,12 @@ export interface components {
         };
         AgentCreate: {
             name: string;
+            /**
+             * Format: email
+             * @description The email of a member of the organization, who answers for the agent.
+             */
             owner?: string;
-            team?: string;
+            team?: components["schemas"]["TeamHandle"];
             description?: string;
             model_provider?: string;
             environment: components["schemas"]["Environment"];
@@ -1398,7 +1442,12 @@ export interface components {
         };
         AgentPatch: {
             name?: string;
+            /**
+             * Format: email
+             * @description The email of a member of the organization, who answers for the agent.
+             */
             owner?: string | null;
+            /** @description The handle of a team of the organization. */
             team?: string | null;
             description?: string | null;
             model_provider?: string | null;
@@ -1549,6 +1598,31 @@ export interface components {
             expires_in?: components["schemas"]["ExpiresIn"];
             on_expiry?: components["schemas"]["OnExpiry"];
             default_for?: components["schemas"]["WaitingVerdict"][];
+        };
+        /** @description The handle of a team, which never changes, for example customer-support. */
+        TeamHandle: string;
+        Team: {
+            handle: components["schemas"]["TeamHandle"];
+            /** @description The name of the team as people read it, unique in the organization whatever the case. */
+            name: string;
+            /**
+             * Format: int32
+             * @description The number of agents of the team.
+             */
+            agents: number;
+            /** Format: date-time */
+            created_at: string;
+        };
+        TeamCreate: {
+            handle: components["schemas"]["TeamHandle"];
+            name: string;
+        };
+        TeamPatch: {
+            name?: string;
+        };
+        TeamList: {
+            data: components["schemas"]["Team"][];
+            has_more: boolean;
         };
         ApprovalGroupList: {
             data: components["schemas"]["ApprovalGroup"][];
@@ -2280,6 +2354,9 @@ export interface components {
         KeyID: string;
         RuleID: string;
         GroupID: string;
+        TeamHandle: components["schemas"]["TeamHandle"];
+        /** @description The handle of the last team of the previous page. */
+        TeamStartingAfter: components["schemas"]["TeamHandle"];
         ApprovalID: string;
         ActionID: string;
         /** @description The secret of the personal link, 32 random bytes in unpadded base64url. */
@@ -2885,6 +2962,155 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            413: components["responses"]["PayloadTooLarge"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listTeams: {
+        parameters: {
+            query?: {
+                /** @description The number of items in the page, from 1 to 100. */
+                limit?: components["parameters"]["Limit"];
+                /** @description The handle of the last team of the previous page. */
+                starting_after?: components["parameters"]["TeamStartingAfter"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of teams. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamList"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createTeam: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeamCreate"];
+            };
+        };
+        responses: {
+            /** @description The team is created. */
+            201: {
+                headers: {
+                    /** @description The address of the team. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Team"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getTeam: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                handle: components["parameters"]["TeamHandle"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The team. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Team"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    deleteTeam: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                handle: components["parameters"]["TeamHandle"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The team is removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateTeam: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                handle: components["parameters"]["TeamHandle"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/merge-patch+json": components["schemas"]["TeamPatch"];
+            };
+        };
+        responses: {
+            /** @description The renamed team. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Team"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             413: components["responses"]["PayloadTooLarge"];
             500: components["responses"]["InternalError"];
         };
