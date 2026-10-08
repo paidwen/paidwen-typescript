@@ -65,7 +65,7 @@ export interface McpClient {
 
 export type McpTarget = McpClient | (abstract new (...args: never[]) => McpClient);
 
-const VERSION = "0.8.0";
+const VERSION = "0.8.1";
 const DEFAULT_BASE_URL = "https://api.paidwen.com";
 const QUOTA_EXCEEDED = "https://paidwen.com/problems/quota-exceeded";
 const DEFAULT_TIMEOUT_MS = 3000;
@@ -309,12 +309,17 @@ export class Paidwen {
     }
   }
 
-  tool<P extends Record<string, unknown>, R>(
+  tool<P extends object, R>(
     name: string,
     fn: (params: P) => R | Promise<R>,
     options: ToolOptions<P> = {},
   ): (params: P) => Promise<R> {
     return (params: P): Promise<R> => {
+      if (!isObject(params)) {
+        return Promise.reject(
+          new PaidwenError(`The tool ${name} takes one object, whose keys become its parameters.`),
+        );
+      }
       const cost = typeof options.cost === "function" ? options.cost(params) : options.cost;
       const input: DecisionInput = { tool: { name, kind: "function" }, params };
       if (cost !== undefined) input.cost = cost;

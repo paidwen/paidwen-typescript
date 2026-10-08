@@ -276,6 +276,30 @@ describe("tool", () => {
     assert.equal(sent[2].cost, undefined);
   });
 
+  it("wraps a function whose parameters an interface declares, and refuses a list", async () => {
+    interface Refund {
+      order: string;
+      amount: number;
+    }
+    const calls: Call[] = [];
+    const paidwen = client(server(200, decision("allow"), calls));
+    const refund = paidwen.tool("payments.refund", async (params: Refund) => params.amount);
+    assert.equal(await refund({ order: "4821", amount: 120 }), 120);
+    assert.deepEqual(JSON.parse(String(calls[0]?.init.body)).params, {
+      order: "4821",
+      amount: 120,
+    });
+    const run = mock.fn((items: string[]) => items.length);
+    await assert.rejects(
+      paidwen.tool("list", run)(["a"]),
+      (error: unknown) =>
+        error instanceof PaidwenError &&
+        error.message === "The tool list takes one object, whose keys become its parameters.",
+    );
+    assert.equal(run.mock.callCount(), 0);
+    assert.equal(calls.length, 1);
+  });
+
   it("never runs the function when Paidwen denies it", async () => {
     for (const verdict of ["block", "quarantine"] as const) {
       const run = mock.fn(() => "done");
