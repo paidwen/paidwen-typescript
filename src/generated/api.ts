@@ -747,7 +747,11 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Change the name of the signed-in person, following JSON Merge Patch.
+         * @description A null name removes the name. The other members of their organizations then see their email address.
+         */
+        patch: operations["updateMe"];
         trace?: never;
     };
     "/v1/session": {
@@ -1942,6 +1946,14 @@ export interface components {
             /** Format: email */
             email: string;
             name?: string;
+            /**
+             * Format: uri
+             * @description The picture of the person at Google or GitHub, taken again at each sign-in with that provider.
+             */
+            avatar_url?: string;
+        };
+        PersonPatch: {
+            name?: string | null;
         };
         /** @enum {string} */
         PlanID: "free" | "starter" | "scale" | "business";
@@ -3744,6 +3756,35 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/merge-patch+json": components["schemas"]["PersonPatch"];
+            };
+        };
+        responses: {
+            /** @description The changed person and their organizations. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Me"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            413: components["responses"]["PayloadTooLarge"];
             500: components["responses"]["InternalError"];
         };
     };
