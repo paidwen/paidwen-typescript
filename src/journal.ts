@@ -16,7 +16,7 @@ import {
   type SpanExporter,
   type SpanProcessor,
 } from "@opentelemetry/sdk-trace-base";
-import { scope, silently } from "./context.ts";
+import { current, scope, silently } from "./context.ts";
 
 export const ACTION_STARTED = "paidwen.action.started";
 const CONVERSATION_ID = "gen_ai.conversation.id";
@@ -133,7 +133,7 @@ export class Journal {
           ...attributes,
         },
       },
-      context.active(),
+      current(),
     );
   }
 

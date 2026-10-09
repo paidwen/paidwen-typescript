@@ -5,13 +5,14 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { DeniedError, Paidwen, PaidwenError, PendingError, type Verdict } from "../src/index.ts";
+import { AGENT_ID, CLIENT_TRACEPARENT } from "./fake.ts";
 
 interface Asked {
   tool: { name: string; kind: string; server?: string };
   params: Record<string, unknown>;
 }
 
-async function connect(served: string[]): Promise<Client> {
+async function connect(served: string[], metas: unknown[] = []): Promise<Client> {
   const server = new Server(
     { name: "payments", version: "1.0.0" },
     { capabilities: { tools: {} } },
@@ -21,6 +22,7 @@ async function connect(served: string[]): Promise<Client> {
   }));
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     served.push(request.params.name);
+    metas.push(request.params._meta);
     return { content: [{ type: "text", text: `refunded ${request.params.arguments?.amount}` }] };
   });
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
@@ -76,6 +78,49 @@ describe("mcp", () => {
     } finally {
       release();
     }
+  });
+
+  it("puts the trace and the baggage of the tool in params._meta, and keeps the values of the client", async () => {
+    const decided: string[] = [];
+    const paidwen = new Paidwen({
+      apiKey: "pw_test_key",
+      baseUrl: "https://api.example.test",
+      journal: false,
+      fetch: async (_url, init) => {
+        decided.push(new Headers(init?.headers).get("traceparent") ?? "");
+        const request = JSON.parse(String(init?.body));
+        const decision = {
+          action_id: request.action_id,
+          agent_id: AGENT_ID,
+          verdict: "allow",
+          rule_id: null,
+          observed: [],
+          decided_at: "2026-10-05T09:00:00Z",
+        };
+        return new Response(JSON.stringify(decision), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      },
+    });
+    const metas: unknown[] = [];
+    const release = paidwen.mcp(Client);
+    try {
+      const client = await connect([], metas);
+      await client.callTool({ name: "refund", arguments: { amount: 5 } });
+      await client.callTool({
+        name: "refund",
+        arguments: { amount: 6 },
+        _meta: { traceparent: CLIENT_TRACEPARENT, tenant: "acme" },
+      });
+    } finally {
+      release();
+    }
+    const own = `paidwen.agent.id=${AGENT_ID}`;
+    assert.deepEqual(metas, [
+      { traceparent: decided[0], baggage: own },
+      { traceparent: CLIENT_TRACEPARENT, tenant: "acme", baggage: own },
+    ]);
   });
 
   it("never sends a refused call to the server", async () => {

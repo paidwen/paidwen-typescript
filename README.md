@@ -59,6 +59,20 @@ paidwen.mcp(Client);
 
 `paidwen.mcp(client)` captures one client only, for a process that runs several agents with their own keys. `mcp()` returns a function that removes the capture. The MCP package ships an ESM copy and a CommonJS copy, and the SDK captures the class it receives: a framework that loads the other copy needs that class too.
 
+## The called agent learns which agent calls it
+
+Each decision names the agent, and the SDK keeps its identifier. During each tool call, the active OpenTelemetry context carries the W3C baggage entry `paidwen.agent.id` with this identifier, next to the rest of your baggage, when the process registers a context manager. The SDK adds the `traceparent` and `baggage` headers to each HTTP call it captures, and the same two values to the `params._meta` of each MCP call it captures, as the OpenTelemetry conventions for MCP ask. It never replaces a header or a value that the call already carries. An HTTP call made inside a tool also receives the headers of the tool, without a new decision, unless its host matches the `ignore` option.
+
+The SDK of the called agent reads `paidwen.agent.id` in the baggage of the active context, and sends it with each decision as `context.caller_agent_id`. The map of Paidwen then shows which agent calls which. The OpenTelemetry instrumentation of your server puts this baggage in the context. Without it, pass the received headers to the context:
+
+```ts
+await paidwen.context({ headers: request.headers }, () => handle(request));
+```
+
+`headers` takes a `Headers` object or a plain object, such as `request.headers` in Node or the `_meta` of a received MCP request. The SDK reads `traceparent` and `baggage` with the W3C propagators of OpenTelemetry, and the tool calls of `fn` join the trace of the caller.
+
+The entry `paidwen.agent.id` holds only the identifier of the agent, which opens nothing without the key of the agent. The baggage of the context leaves with each captured call, including the calls to third parties. A `fetch` receives the headers through the `undici:request:create` channel of Node, so register the OpenTelemetry instrumentation of undici before `paidwen.http()`, or the call carries two `traceparent` headers. An `http.request` receives them when it is created, before its decision: a request created before the first decision of the process leaves without baggage, and a request with `expect: 100-continue` or with headers in an array leaves without both headers.
+
 ## An action can wait for a human approval
 
 ```ts

@@ -3,6 +3,10 @@ import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Decision, DecisionRequest, Problem } from "../src/index.ts";
 
+export const AGENT_ID = "4b0f3a52-8c1d-4e7a-9f26-1d5c7b9e3a40";
+export const CALLER_ID = "9e2d4c61-7a3b-4f58-8e10-6c2a9b4d7f13";
+export const CLIENT_TRACEPARENT = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01";
+
 export const DISABLED: Problem = {
   type: "https://paidwen.com/problems/agent-disabled",
   title: "The agent is disabled.",

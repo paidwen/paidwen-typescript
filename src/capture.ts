@@ -1,20 +1,34 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+import diagnostics from "node:diagnostics_channel";
 import http from "node:http";
 import https from "node:https";
 import { syncBuiltinESMExports } from "node:module";
 import type { Span } from "@opentelemetry/api";
+import { type Carrier, missing } from "./context.ts";
 import { bodyOf, describe, type HttpCall, MAX_BODY_BYTES } from "./http.ts";
 
 export interface CaptureHooks {
   skips(host?: string): boolean;
-  begin(call: HttpCall): Promise<Span>;
-  inside<T>(fn: () => T): T;
+  passing(host: string): Carrier | undefined;
+  open(call: HttpCall): Span;
+  authorize(span: Span, call: HttpCall): Promise<void>;
+  carrier(span: Span): Carrier;
+  inside<T>(span: Span, fn: (carrier: Carrier) => T): T;
   answered(span: Span, status: number): void;
   failed(span: Span, error: unknown): void;
+}
+
+interface UndiciRequest {
+  headers: unknown;
+  addHeader(name: string, value: string): unknown;
 }
 
 type Fetch = typeof globalThis.fetch;
 type Module = typeof http | typeof https;
 type Callback = (response: http.IncomingMessage) => void;
+
+const UNDICI_REQUEST_CREATED = "undici:request:create";
+const sending = new AsyncLocalStorage<Carrier>();
 
 async function readLimited(request: Request): Promise<string | undefined> {
   const reader = request.body?.getReader();
@@ -76,11 +90,19 @@ function captureFetch(hooks: CaptureHooks): () => void {
   const original = globalThis.fetch;
   const captured: Fetch = async (input, init) => {
     const address = addressOf(input);
-    if (!address || hooks.skips(address.host)) return original(input, init);
+    if (!address || hooks.skips(address.host)) {
+      const carrier = address === undefined ? undefined : hooks.passing(address.host);
+      if (carrier === undefined) return original(input, init);
+      return sending.run(carrier, () => original(input, init));
+    }
     const read = await readFetch(input, init, address);
-    const span = await hooks.begin(describe(read.method, address, read.body));
+    const call = describe(read.method, address, read.body);
+    const span = hooks.open(call);
+    await hooks.authorize(span, call);
     try {
-      const response = await hooks.inside(() => original(input, init));
+      const response = await hooks.inside(span, (carrier) =>
+        sending.run(carrier, () => original(input, init)),
+      );
       hooks.answered(span, response.status);
       return response;
     } catch (error) {
@@ -150,10 +172,23 @@ function heldAgent(real: http.Agent, released: Promise<void>): http.Agent {
   return held;
 }
 
+function hostOf(outgoing: http.ClientRequest): string {
+  return String(outgoing.getHeader("host") ?? outgoing.host);
+}
+
+function propagate(outgoing: http.ClientRequest, carrier: Carrier | undefined): void {
+  if (carrier === undefined || outgoing.headersSent) return;
+  for (const [name, value] of missing(carrier, (header) => outgoing.hasHeader(header))) {
+    outgoing.setHeader(name, value);
+  }
+}
+
 function wrapRequest(module: Module, original: Module["request"], hooks: CaptureHooks) {
   return function request(this: unknown, ...args: unknown[]): http.ClientRequest {
     if (hooks.skips()) {
-      return (original as (...a: unknown[]) => http.ClientRequest).apply(this, args);
+      const passed = (original as (...a: unknown[]) => http.ClientRequest).apply(this, args);
+      propagate(passed, hooks.passing(hostOf(passed)));
+      return passed;
     }
     const { url, options, callback } = parse(args);
     let release!: () => void;
@@ -169,11 +204,14 @@ function wrapRequest(module: Module, original: Module["request"], hooks: Capture
       this,
       call.filter((value) => value !== undefined),
     );
-    const host = String(outgoing.getHeader("host") ?? outgoing.host);
+    const host = hostOf(outgoing);
     if (hooks.skips(host)) {
       release();
       return outgoing;
     }
+    const address = new URL(`${outgoing.protocol}//${host}${outgoing.path}`);
+    const span = hooks.open(describe(outgoing.method, address));
+    propagate(outgoing, hooks.carrier(span));
     const chunks: Buffer[] = [];
     let size = 0;
     let overflow = false;
@@ -195,12 +233,11 @@ function wrapRequest(module: Module, original: Module["request"], hooks: Capture
     const decide = () => {
       if (decided) return;
       decided = true;
-      const address = new URL(`${outgoing.protocol}//${host}${outgoing.path}`);
       const text = overflow ? undefined : Buffer.concat(chunks).toString("utf8");
       const contentType = outgoing.getHeader("content-type");
       const body = bodyOf(text, contentType === undefined ? null : String(contentType));
-      hooks.begin(describe(outgoing.method, address, body)).then(
-        (span) => {
+      hooks.authorize(span, describe(outgoing.method, address, body)).then(
+        () => {
           outgoing.once("response", (response) => hooks.answered(span, response.statusCode ?? 0));
           outgoing.once("error", (error) => hooks.failed(span, error));
           release();
@@ -253,8 +290,29 @@ function captureModule(module: Module, hooks: CaptureHooks): () => void {
   };
 }
 
+function propagateUndici(): () => void {
+  const add = (message: unknown) => {
+    const carrier = sending.getStore();
+    const request = (message as { request: UndiciRequest }).request;
+    if (carrier === undefined || !Array.isArray(request.headers)) return;
+    const names = request.headers
+      .filter((_, index) => index % 2 === 0)
+      .map((name) => String(name).toLowerCase());
+    for (const [name, value] of missing(carrier, (header) => names.includes(header))) {
+      request.addHeader(name, value);
+    }
+  };
+  diagnostics.subscribe(UNDICI_REQUEST_CREATED, add);
+  return () => diagnostics.unsubscribe(UNDICI_REQUEST_CREATED, add);
+}
+
 export function install(hooks: CaptureHooks): () => void {
-  const restores = [captureFetch(hooks), captureModule(http, hooks), captureModule(https, hooks)];
+  const restores = [
+    captureFetch(hooks),
+    captureModule(http, hooks),
+    captureModule(https, hooks),
+    propagateUndici(),
+  ];
   syncBuiltinESMExports();
   return () => {
     for (const restore of restores.reverse()) restore();

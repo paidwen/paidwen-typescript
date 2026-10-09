@@ -768,6 +768,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/agent-map": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read who calls whom and which tools each agent touches in a period, read from the journal.
+         * @description The map gathers the decisions of the period. An edge goes from the caller of an action to its agent, and from the agent to the server or the function of its tool. Without agent_id, the map keeps the 200 most active agents and counts the others in hidden_agents. With agent_id, it keeps the agent, its 50 most active callers and its 50 most active targets.
+         */
+        get: operations["getAgentMap"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/agents/{agent_id}/activity": {
         parameters: {
             query?: never;
@@ -1460,6 +1480,8 @@ export interface components {
         Decision: {
             /** Format: uuid */
             action_id: string;
+            /** @description The agent that the key or the token identifies. The SDK passes it to the agents it calls, as their caller. */
+            agent_id?: string;
             verdict: components["schemas"]["Verdict"];
             /** @description The active rule that decided, or null when no active rule decided. */
             rule_id: string | null;
@@ -2312,6 +2334,64 @@ export interface components {
             data: components["schemas"]["SessionStep"][];
             has_more: boolean;
         };
+        /** @enum {string} */
+        MapPeriod: "24h" | "7d" | "30d";
+        MapNode: {
+            /** @description agent:<agent id>, server:<host or MCP server>, or tool:<function name>. */
+            id: string;
+            /** @enum {string} */
+            kind: "agent" | "server" | "tool";
+            name: string;
+            agent_id?: string;
+            /** Format: int64 */
+            actions: number;
+        };
+        MapEdge: {
+            source: string;
+            target: string;
+            /** @description The names of the tools behind the edge, at most 20. */
+            tools: string[];
+            /** Format: int64 */
+            actions: number;
+            /** Format: int64 */
+            allowed: number;
+            /**
+             * Format: int64
+             * @description The actions that waited for a human answer.
+             */
+            waited: number;
+            /**
+             * Format: int64
+             * @description The actions blocked or quarantined at their decision.
+             */
+            blocked: number;
+            /**
+             * Format: int64
+             * @description The executions that ended in error.
+             */
+            errors: number;
+            /**
+             * Format: double
+             * @description The estimated cost of the actions.
+             */
+            cost_usd: number;
+            /** Format: date-time */
+            last_at: string;
+        };
+        AgentMap: {
+            /** Format: date-time */
+            period_start: string;
+            /** Format: date-time */
+            period_end: string;
+            environment: components["schemas"]["Environment"];
+            nodes: components["schemas"]["MapNode"][];
+            edges: components["schemas"]["MapEdge"][];
+            /**
+             * Format: int64
+             * @description The active agents that the map leaves out.
+             */
+            hidden_agents: number;
+        };
         ActionList: {
             data: components["schemas"]["Action"][];
             has_more: boolean;
@@ -2730,6 +2810,10 @@ export interface components {
         SessionBefore: string;
         /** @description The cursor of a step. The page holds the steps that follow it. */
         StepAfter: string;
+        /** @description The period of the map, ending now. 30d by default. */
+        MapPeriodParameter: components["schemas"]["MapPeriod"];
+        /** @description The environment of the agents on the map. production by default. */
+        MapEnvironment: components["schemas"]["Environment"];
         ApprovalID: string;
         ActionID: string;
         /** @description The secret of the personal link, 32 random bytes in unpadded base64url. */
@@ -4468,6 +4552,38 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    getAgentMap: {
+        parameters: {
+            query?: {
+                /** @description The period of the map, ending now. 30d by default. */
+                period?: components["parameters"]["MapPeriodParameter"];
+                /** @description The environment of the agents on the map. production by default. */
+                environment?: components["parameters"]["MapEnvironment"];
+                /** @description Only the actions of this agent. */
+                agent_id?: components["parameters"]["AgentFilter"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The map of the period. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentMap"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["Unavailable"];
         };

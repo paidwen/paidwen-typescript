@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { type AddressInfo, createServer, type Socket } from "node:net";
 import { afterEach, beforeEach, describe, it, mock } from "node:test";
+import { type Context, context, propagation, ROOT_CONTEXT } from "@opentelemetry/api";
+import { AsyncLocalStorageContextManager } from "@opentelemetry/context-async-hooks";
 import {
   type Decision,
   DeniedError,
@@ -11,7 +13,7 @@ import {
   RequestError,
   type Verdict,
 } from "../src/index.ts";
-import { DISABLED } from "./fake.ts";
+import { AGENT_ID, CALLER_ID, DISABLED } from "./fake.ts";
 
 const ACTION_ID = "6f1c2a7e-3b5d-4c8e-9a10-2f4b6d8e0a12";
 const INCIDENT_ID = "3c7e5a10-9b2d-4f6e-8a1c-5d4b3a2f1e0d";
@@ -56,6 +58,32 @@ function client(transport: typeof fetch, options: PaidwenOptions = {}): Paidwen 
     journal: false,
     ...options,
   });
+}
+
+function answers(...bodies: Decision[]): typeof fetch {
+  return async () =>
+    new Response(JSON.stringify(bodies.shift()), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+}
+
+function baggageOf(entries: Record<string, string>): Context {
+  return propagation.setBaggage(
+    ROOT_CONTEXT,
+    propagation.createBaggage(
+      Object.fromEntries(Object.entries(entries).map(([key, value]) => [key, { value }])),
+    ),
+  );
+}
+
+async function managed<T>(fn: () => Promise<T>): Promise<T> {
+  context.setGlobalContextManager(new AsyncLocalStorageContextManager().enable());
+  try {
+    return await fn();
+  } finally {
+    context.disable();
+  }
 }
 
 const hanging: typeof fetch = (_url, init) =>
@@ -227,6 +255,22 @@ describe("decide", () => {
     );
   });
 
+  it("sends the caller that the baggage names, and never its own agent", async () => {
+    const calls: Call[] = [];
+    const paidwen = client(server(200, { ...decision("allow"), agent_id: AGENT_ID }, calls));
+    const ask = () => paidwen.decide({ tool: { name: "x", kind: "function" } });
+    await managed(async () => {
+      for (const named of [CALLER_ID, AGENT_ID, CALLER_ID, "a".repeat(65)]) {
+        await context.with(baggageOf({ "paidwen.agent.id": named }), ask);
+      }
+      await ask();
+    });
+    assert.deepEqual(
+      calls.map((call) => JSON.parse(String(call.init.body)).context?.caller_agent_id),
+      [CALLER_ID, undefined, CALLER_ID, undefined, undefined],
+    );
+  });
+
   it("repeats the problem of a server error in its warning", async () => {
     const starting = {
       type: "https://paidwen.com/problems/unavailable",
@@ -260,6 +304,26 @@ describe("tool", () => {
     const sent = JSON.parse(String(calls[0]?.init.body));
     assert.deepEqual(sent.tool, { name: "payments.refund", kind: "function" });
     assert.deepEqual(sent.params, { order: "4821", amount: 120 });
+  });
+
+  it("keeps the identifier of its agent and puts it in the baggage of each tool", async () => {
+    const paidwen = client(
+      answers({ ...decision("allow"), agent_id: AGENT_ID }, decision("allow")),
+    );
+    await paidwen.decide({ tool: { name: "a", kind: "function" } });
+    const read = () =>
+      Object.fromEntries(
+        (propagation.getBaggage(context.active())?.getAllEntries() ?? []).map(([key, entry]) => [
+          key,
+          entry.value,
+        ]),
+      );
+    const [inside, after] = await managed(async () => [
+      await context.with(baggageOf({ tenant: "acme" }), () => paidwen.tool("search", read)({})),
+      read(),
+    ]);
+    assert.deepEqual(inside, { tenant: "acme", "paidwen.agent.id": AGENT_ID });
+    assert.deepEqual(after, {});
   });
 
   it("sends the cost that the agent estimates for the tool", async () => {

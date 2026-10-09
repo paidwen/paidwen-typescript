@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, it } from "node:test";
 import { DeniedError, Paidwen, PendingError, RequestError, type Wait } from "../src/index.ts";
-import { bodyOf, DISABLED, FakePaidwen, status, waiting } from "./fake.ts";
+import {
+  bodyOf,
+  CALLER_ID,
+  CLIENT_TRACEPARENT,
+  DISABLED,
+  FakePaidwen,
+  status,
+  waiting,
+} from "./fake.ts";
 
 describe("a wrapped function that waits for a human answer", () => {
   const fake = new FakePaidwen();
@@ -169,6 +177,38 @@ describe("the context of Paidwen", () => {
     assert.notEqual(second?.action_id, first?.action_id);
     assert.equal(first?.context?.session_id, "session-4821");
     assert.equal(second?.context?.session_id, "session-4821");
+  });
+
+  it("gives the caller and the trace of the received headers to the decisions of fn", async () => {
+    fake.decisions.length = 0;
+    const paidwen = new Paidwen({ apiKey: "pw_test_key", baseUrl: fake.url, journal: false });
+    const ask = (name: string) => paidwen.decide({ tool: { name, kind: "function" } });
+    await paidwen.context(
+      {
+        headers: {
+          Traceparent: CLIENT_TRACEPARENT,
+          baggage: `paidwen.agent.id=${CALLER_ID},tenant=acme`,
+        },
+      },
+      async () => {
+        await ask("a");
+        await paidwen.tool("search", async () => undefined)({});
+      },
+    );
+    await paidwen.context(
+      { headers: new Headers({ baggage: `paidwen.agent.id=${CALLER_ID}` }) },
+      () => ask("b"),
+    );
+    await ask("c");
+    const sent = fake.decisions.map(
+      (recorded) =>
+        bodyOf<{ context?: { caller_agent_id?: string; trace_id?: string } }>(recorded).context,
+    );
+    assert.deepEqual(
+      sent.map((context) => context?.caller_agent_id),
+      [CALLER_ID, CALLER_ID, CALLER_ID, undefined],
+    );
+    assert.equal(sent[1]?.trace_id, CLIENT_TRACEPARENT.split("-")[1]);
   });
 
   it("sends the trace of the tool call with its decision", async () => {

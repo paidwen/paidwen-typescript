@@ -1,14 +1,28 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { createServer, get as httpGet, request as httpRequest, type Server } from "node:http";
+import {
+  createServer,
+  get as httpGet,
+  request as httpRequest,
+  type IncomingHttpHeaders,
+  type Server,
+} from "node:http";
 import type { AddressInfo } from "node:net";
 import { after, afterEach, before, beforeEach, describe, it } from "node:test";
 import { DeniedError, Paidwen, RequestError } from "../src/index.ts";
-import { DISABLED, decision, FakePaidwen } from "./fake.ts";
+import {
+  AGENT_ID,
+  CALLER_ID,
+  CLIENT_TRACEPARENT,
+  DISABLED,
+  decision,
+  FakePaidwen,
+} from "./fake.ts";
 
 describe("the HTTP capture", () => {
   const fake = new FakePaidwen();
-  const received: { method: string; url: string; body: string }[] = [];
+  const received: { method: string; url: string; body: string; headers: IncomingHttpHeaders }[] =
+    [];
   let api: Server;
   let apiUrl = "";
   let release: (() => void) | undefined;
@@ -23,6 +37,7 @@ describe("the HTTP capture", () => {
           method: request.method ?? "",
           url: request.url ?? "",
           body: Buffer.concat(chunks).toString(),
+          headers: request.headers,
         });
         response.setHeader("content-type", "application/json");
         response.statusCode = request.url?.startsWith("/missing") ? 404 : 200;
@@ -58,6 +73,19 @@ describe("the HTTP capture", () => {
     return paidwen;
   }
 
+  function got(url: string, headers: Record<string, string> = {}): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      httpGet(url, { headers }, (response) => {
+        response.resume();
+        response.on("end", resolve);
+      }).on("error", reject);
+    });
+  }
+
+  function sent(): [string, unknown, unknown][] {
+    return received.map((call) => [call.url, call.headers.traceparent, call.headers.baggage]);
+  }
+
   it("asks before a fetch and reads the call as a tool", async () => {
     capture();
     const response = await fetch(`${apiUrl}/v1/refunds?expand=charge&sig=abc&tag=a&tag=b`, {
@@ -89,6 +117,108 @@ describe("the HTTP capture", () => {
       },
     });
     assert.ok(!JSON.stringify(fake.decisions[0]?.body).includes("sk_live_secret"));
+  });
+
+  it("sends the trace and the baggage of the tool with each call, and keeps the headers of the client", async () => {
+    fake.answer = (request) => decision(request, "allow", { agent_id: AGENT_ID });
+    capture();
+    await (await fetch(`${apiUrl}/v1/fetched`)).arrayBuffer();
+    await got(`${apiUrl}/v1/requested`);
+    await (
+      await fetch(`${apiUrl}/v1/kept`, {
+        headers: { Traceparent: CLIENT_TRACEPARENT, baggage: "tenant=acme" },
+      })
+    ).arrayBuffer();
+    await (
+      await fetch(new Request(`${apiUrl}/v1/partly`, { headers: { Baggage: "tenant=acme" } }))
+    ).arrayBuffer();
+    await got(`${apiUrl}/v1/kept`, { TRACEPARENT: CLIENT_TRACEPARENT });
+    const decided = fake.decisions.map((recorded) => recorded.headers.traceparent);
+    const own = `paidwen.agent.id=${AGENT_ID}`;
+    assert.deepEqual(sent(), [
+      ["/v1/fetched", decided[0], own],
+      ["/v1/requested", decided[1], own],
+      ["/v1/kept", CLIENT_TRACEPARENT, "tenant=acme"],
+      ["/v1/partly", decided[3], "tenant=acme"],
+      ["/v1/kept", CLIENT_TRACEPARENT, own],
+    ]);
+    assert.equal(new Set(decided).size, 5);
+  });
+
+  it("gives the trace and the baggage of a tool to the calls made inside it, without a decision", async () => {
+    fake.answer = (request) => decision(request, "allow", { agent_id: AGENT_ID });
+    const ask = capture().tool("billing.ask", async () => {
+      await (await fetch(`${apiUrl}/v1/fetched`)).arrayBuffer();
+      await got(`${apiUrl}/v1/requested`);
+      await (
+        await fetch(`${apiUrl}/v1/kept`, { headers: { traceparent: CLIENT_TRACEPARENT } })
+      ).arrayBuffer();
+    });
+    await ask({});
+    assert.equal(fake.decisions.length, 1);
+    const tool = fake.decisions[0]?.headers.traceparent;
+    const own = `paidwen.agent.id=${AGENT_ID}`;
+    assert.deepEqual(sent(), [
+      ["/v1/fetched", tool, own],
+      ["/v1/requested", tool, own],
+      ["/v1/kept", CLIENT_TRACEPARENT, own],
+    ]);
+  });
+
+  it("gives nothing to a call made inside a tool toward an ignored host", async () => {
+    fake.answer = (request) => decision(request, "allow", { agent_id: AGENT_ID });
+    await capture({ ignore: ["127.0.0.*"] }).tool("search", async () => {
+      await (await fetch(`${apiUrl}/v1/fetched`)).arrayBuffer();
+      await got(`${apiUrl}/v1/requested`);
+    })({});
+    assert.equal(fake.decisions.length, 1);
+    assert.deepEqual(sent(), [
+      ["/v1/fetched", undefined, undefined],
+      ["/v1/requested", undefined, undefined],
+    ]);
+  });
+
+  it("lets an agent called from a tool of another agent send its caller", async () => {
+    const agents: Record<string, string> = {
+      "Bearer key-a": CALLER_ID,
+      "Bearer key-b": AGENT_ID,
+    };
+    fake.answer = (request) =>
+      decision(request, "allow", {
+        agent_id: agents[String(fake.decisions.at(-1)?.headers.authorization)],
+      });
+    const billing = new Paidwen({ apiKey: "key-b", baseUrl: fake.url, journal: false });
+    const refund = billing.tool("refunds.create", async () => "re_1");
+    const service = createServer((request, response) =>
+      billing.context({ headers: request.headers }, async () => {
+        response.end(await refund({}));
+      }),
+    );
+    service.listen(0, "127.0.0.1");
+    await once(service, "listening");
+    try {
+      const triage = new Paidwen({ apiKey: "key-a", baseUrl: fake.url, journal: false });
+      release = triage.http();
+      const port = (service.address() as AddressInfo).port;
+      const ask = triage.tool("billing.ask", async () =>
+        (await fetch(`http://127.0.0.1:${port}/ask`)).text(),
+      );
+      assert.equal(await ask({}), "re_1");
+    } finally {
+      service.closeAllConnections();
+      service.close();
+    }
+    const [asked, refunded] = fake.decisions.map((recorded) => ({
+      key: recorded.headers.authorization,
+      traceparent: String(recorded.headers.traceparent),
+      context: (recorded.body as { context?: { caller_agent_id?: string } }).context,
+    }));
+    assert.equal(fake.decisions.length, 2);
+    assert.equal(asked?.key, "Bearer key-a");
+    assert.equal(asked?.context?.caller_agent_id, undefined);
+    assert.equal(refunded?.key, "Bearer key-b");
+    assert.equal(refunded?.context?.caller_agent_id, CALLER_ID);
+    assert.equal(refunded?.traceparent.split("-")[1], asked?.traceparent.split("-")[1]);
   });
 
   it("never sends a refused fetch", async () => {

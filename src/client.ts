@@ -1,15 +1,21 @@
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
-import { context, type Span } from "@opentelemetry/api";
+import { type Context, context, type Span } from "@opentelemetry/api";
 import { isTracingSuppressed } from "@opentelemetry/core";
 import type { SpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { install } from "./capture.ts";
 import {
+  type Carrier,
   type ContextOptions,
+  callerOf,
+  current,
   insideAction,
+  missing,
+  propagated,
   quiet,
   scope,
   takeActionId,
+  withAgent,
   withContext,
 } from "./context.ts";
 import {
@@ -107,6 +113,7 @@ export class Paidwen {
   readonly #fetch: typeof fetch;
   readonly #journal: Journal;
   #releaseHttp: (() => void) | undefined;
+  #agentId: string | undefined;
 
   constructor(options: PaidwenOptions = {}) {
     const onUnavailable = options.onUnavailable ?? "block";
@@ -152,6 +159,8 @@ export class Paidwen {
     const session = scope().sessionId;
     if (session !== undefined) known.session_id = session;
     if (span) known.trace_id = span.spanContext().traceId;
+    const caller = callerOf(this.#agentId);
+    if (caller !== undefined) known.caller_agent_id = caller;
     if (Object.keys(known).length > 0 || input.context) {
       request.context = { ...known, ...input.context };
     }
@@ -202,6 +211,9 @@ export class Paidwen {
       body = await response.json();
     } catch (cause) {
       return this.#fallback(request, "Paidwen did not answer", messageOf(cause));
+    }
+    if (isObject(body) && typeof body.agent_id === "string" && body.agent_id) {
+      this.#agentId = body.agent_id;
     }
     return body as Decision;
   }
@@ -328,12 +340,22 @@ export class Paidwen {
     throw new DeniedError(decision, status);
   }
 
-  async #run<R>(input: DecisionInput, action: () => R | Promise<R>): Promise<R> {
+  #toolContext(): Context {
+    return withAgent(current(), this.#agentId);
+  }
+
+  #inside<R>(span: Span, action: (carrier: Carrier) => R): R {
+    const tool = this.#toolContext();
+    const carrier = propagated(tool, span);
+    return insideAction(tool, carrier, () => action(carrier));
+  }
+
+  async #run<R>(input: DecisionInput, action: (carrier: Carrier) => R | Promise<R>): Promise<R> {
     const span = this.#journal.startTool(input.tool.name, toolAttributes(input));
     try {
       await this.#authorize(input, span);
       started(span);
-      const result = await insideAction(() => action());
+      const result = await this.#inside(span, action);
       finish(span);
       return result;
     } catch (error) {
@@ -374,11 +396,12 @@ export class Paidwen {
     }
     const own = Object.getOwnPropertyDescriptor(holder, "request");
     const send = holder.request as (this: McpClient, ...args: unknown[]) => unknown;
-    const run = <R>(input: DecisionInput, action: () => Promise<R>) => this.#run(input, action);
+    const run = <R>(input: DecisionInput, action: (carrier: Carrier) => Promise<R>) =>
+      this.#run(input, action);
     async function request(this: McpClient, message: unknown, ...rest: unknown[]) {
       if (isObject(message) && message.method === "tools/call") {
-        return await run(toolCall(this, message.params), async () =>
-          send.call(this, message, ...rest),
+        return await run(toolCall(this, message.params), async (carrier) =>
+          send.call(this, withMeta(message, carrier), ...rest),
         );
       }
       return await send.call(this, message, ...rest);
@@ -404,6 +427,7 @@ export class Paidwen {
       throw new PaidwenError("The HTTP calls of this process are already captured by Paidwen.");
     }
     const ignore = options.ignore ?? [];
+    const own = URL.canParse(this.#base) ? new URL(this.#base).host : undefined;
     const ended = new WeakSet<Span>();
     const close = (span: Span, error?: unknown) => {
       if (ended.has(span)) return;
@@ -418,8 +442,16 @@ export class Paidwen {
         }
         return host !== undefined && ignore.some((pattern) => matches(pattern, host));
       },
-      begin: async (call) => {
-        const span = this.#journal.startTool(call.tool.name, toolAttributes(call));
+      passing: (host) => {
+        const current = scope();
+        if (!current.inAction || current.silenced || isTracingSuppressed(context.active())) {
+          return undefined;
+        }
+        if (host === own || ignore.some((pattern) => matches(pattern, host))) return undefined;
+        return current.carrier;
+      },
+      open: (call) => this.#journal.startTool(call.tool.name, toolAttributes(call)),
+      authorize: async (span, call) => {
         try {
           await this.#authorize(call, span);
         } catch (error) {
@@ -427,9 +459,9 @@ export class Paidwen {
           throw error;
         }
         started(span);
-        return span;
       },
-      inside: (fn) => insideAction(fn),
+      carrier: (span) => propagated(this.#toolContext(), span),
+      inside: (span, fn) => this.#inside(span, fn),
       answered: (span, status) => {
         span.setAttribute("http.response.status_code", status);
         close(span, status >= 400 ? new HttpStatusError(status) : undefined);
@@ -487,6 +519,14 @@ function toolAttributes(input: DecisionInput): Record<string, string> {
   if (input.tool.server !== undefined) attributes["paidwen.tool.server"] = input.tool.server;
   if (input.action_id !== undefined) attributes["paidwen.action.id"] = input.action_id;
   return attributes;
+}
+
+function withMeta(message: Record<PropertyKey, unknown>, carrier: Carrier): unknown {
+  const params = isObject(message.params) ? message.params : {};
+  const meta = isObject(params._meta) ? params._meta : {};
+  const added = missing(carrier, (name) => Object.hasOwn(meta, name));
+  if (added.length === 0) return message;
+  return { ...message, params: { ...params, _meta: { ...meta, ...Object.fromEntries(added) } } };
 }
 
 function toolCall(client: McpClient, params: unknown): DecisionInput {

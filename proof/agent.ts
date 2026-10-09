@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { createServer } from "node:http";
 import { BasicTracerProvider } from "@opentelemetry/sdk-trace-base";
 import { DeniedError, Paidwen } from "../src/index.ts";
 
@@ -138,6 +139,56 @@ async function session(sessionId: string): Promise<void> {
   await paidwen.shutdown();
 }
 
+async function post(url: string): Promise<{ status: number }> {
+  const response = await fetch(url, { method: "POST" });
+  await response.arrayBuffer();
+  return { status: response.status };
+}
+
+function listen(
+  paidwen: Paidwen,
+  port: number,
+  handle: () => Promise<{ status: number }>,
+): Promise<void> {
+  const server = createServer((request, response) => {
+    void paidwen.context({ headers: request.headers }, handle).then(
+      (result) => {
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify(result));
+      },
+      (error: unknown) => {
+        response.writeHead(500, { "content-type": "text/plain" });
+        response.end(String(error));
+      },
+    );
+  });
+  server.listen(port, "127.0.0.1", () => emit({ event: "ready", port }));
+  return new Promise(() => undefined);
+}
+
+async function serve(port: number, toolName: string, next: string): Promise<void> {
+  const paidwen = new Paidwen();
+  paidwen.http();
+  const work = paidwen.tool(toolName, () => post(next));
+  await listen(paidwen, port, () => work({}));
+}
+
+async function relay(port: number, next: string): Promise<void> {
+  const paidwen = new Paidwen();
+  paidwen.http();
+  await listen(paidwen, port, () => post(next));
+}
+
+async function call(url: string, toolName: string): Promise<void> {
+  const paidwen = new Paidwen();
+  const release = paidwen.http();
+  const ask = paidwen.tool(toolName, () => post(url));
+  const result = await ask({});
+  emit({ event: "done", result });
+  release();
+  await paidwen.shutdown();
+}
+
 async function loop(parallel: number): Promise<void> {
   const paidwen = new Paidwen();
   const provider = new BasicTracerProvider({ spanProcessors: [paidwen.spanProcessor()] });
@@ -196,6 +247,12 @@ async function httpCalls(
 const [mode, argument, extra, variant] = process.argv.slice(2);
 if (mode === "refund") {
   await refund();
+} else if (mode === "serve" && argument && extra && variant) {
+  await serve(Number(argument), extra, variant);
+} else if (mode === "relay" && argument && extra) {
+  await relay(Number(argument), extra);
+} else if (mode === "call" && argument && extra) {
+  await call(argument, extra);
 } else if (mode === "session" && argument) {
   await session(argument);
 } else if (mode === "loop") {
@@ -204,6 +261,6 @@ if (mode === "refund") {
   await httpCalls(argument, Number(extra ?? "1000"), 100, variant === "captured");
 } else {
   throw new Error(
-    "usage: node proof/agent.ts refund | session <id> | loop [parallel] | http <url> [calls] [plain|captured]",
+    "usage: node proof/agent.ts refund | session <id> | serve <port> <tool> <next> | relay <port> <next> | call <url> <tool> | loop [parallel] | http <url> [calls] [plain|captured]",
   );
 }
