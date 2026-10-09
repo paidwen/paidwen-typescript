@@ -283,6 +283,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Write a rule, permissions or a budget from a sentence.
+         * @description A model translates the sentence into an exact rule, permissions or budget. Paidwen checks the draft, reads it back from the exact result, replays it on the decisions of the last 30 days and lists its warnings. Nothing changes until the draft is sent to the route that creates it. The model writes the draft and never decides an action.
+         */
+        post: operations["createDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/rules/{rule_id}": {
         parameters: {
             query?: never;
@@ -1795,6 +1815,8 @@ export interface components {
              * @description The approval group that answers this rule. Only a rule whose verdict waits for a human answer names a group. Without it, the default group of the verdict answers.
              */
             approval_group_id?: string;
+            /** @description The sentence the rule was written from. A change of the condition, the verdict or the group without a new sentence removes it. */
+            source_text?: string;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -1807,6 +1829,97 @@ export interface components {
             mode: components["schemas"]["RuleMode"];
             /** Format: uuid */
             approval_group_id?: string;
+            /** @description The sentence the rule was written from, kept for the audit. */
+            source_text?: string;
+        };
+        DraftRequest: {
+            /** @description The sentence, in any language. */
+            text: string;
+            /**
+             * Format: uuid
+             * @description The agent the sentence is about, when the sentence comes from the page of an agent. A sentence that names another agent keeps it.
+             */
+            agent_id?: string;
+        };
+        /** @enum {string} */
+        DraftKind: "rule" | "permissions" | "budget";
+        Draft: {
+            kind: components["schemas"]["DraftKind"];
+            text: string;
+            rule?: components["schemas"]["RuleCreate"];
+            /**
+             * Format: uuid
+             * @description The agent of the permissions or of the budget.
+             */
+            agent_id?: string;
+            permissions?: components["schemas"]["AgentPermissions"];
+            current_permissions?: components["schemas"]["AgentPermissions"];
+            budget?: components["schemas"]["Budget"];
+            /** @description The draft read back from the exact rule, permissions or budget, by fixed code and never by the model. Values sit between backticks. */
+            reading: string;
+            /** @description False when a part of the condition has no sentence and stays in CEL. */
+            complete: boolean;
+            preview: components["schemas"]["DraftPreview"];
+            warnings: components["schemas"]["DraftWarning"][];
+        };
+        DraftPreview: {
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            to: string;
+            /**
+             * Format: int64
+             * @description The decisions of the period that the preview read.
+             */
+            scanned: number;
+            /**
+             * Format: int64
+             * @description For a rule, the decisions it would have touched. For permissions, the decisions they would have refused. For a budget, the days its limits would have stopped the agent.
+             */
+            matched: number;
+            /**
+             * Format: int64
+             * @description The decisions where the condition reads a field that the action does not carry.
+             */
+            failed: number;
+            /** @description True when the period holds more decisions than the preview reads. */
+            truncated: boolean;
+            agents: components["schemas"]["DraftAgentCount"][];
+            tools: components["schemas"]["DraftToolCount"][];
+            examples: components["schemas"]["DraftExample"][];
+            /** @description For a budget, the days its limits would have stopped the agent. */
+            days?: components["schemas"]["DraftDay"][];
+        };
+        DraftAgentCount: {
+            agent_id: string;
+            name: string;
+            /** Format: int64 */
+            matched: number;
+        };
+        DraftToolCount: {
+            name: string;
+            /** Format: int64 */
+            matched: number;
+        };
+        DraftExample: {
+            action_id: string;
+            /** Format: date-time */
+            decided_at: string;
+            agent_id: string;
+            agent_name: string;
+            tool_name: string;
+            verdict: components["schemas"]["Verdict"];
+        };
+        DraftDay: {
+            /** Format: date */
+            day: string;
+            /** Format: double */
+            spent_usd: number;
+        };
+        DraftWarning: {
+            /** @enum {string} */
+            code: "broad" | "never" | "absent_field" | "unknown_tool" | "incomplete";
+            text: string;
         };
         RulePatch: {
             name?: string | null;
@@ -1815,6 +1928,7 @@ export interface components {
             mode?: components["schemas"]["RuleMode"];
             /** Format: uuid */
             approval_group_id?: string | null;
+            source_text?: string | null;
         };
         RuleList: {
             data: components["schemas"]["Rule"][];
@@ -2753,6 +2867,26 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
+        /** @description The sentence does not describe a rule, permissions or a budget that Paidwen can write exactly, or it names an agent, a team or an approval group that the organization does not have. The detail says why. */
+        Untranslatable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description The organization wrote the drafts its day allows. The Retry-After header gives the seconds until the next day in UTC. */
+        TooManyDrafts: {
+            headers: {
+                /** @description The seconds to wait before asking again. */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
         /** @description The agent polls faster than the interval. It must add 5 seconds to its interval for this and all subsequent polls, as the slow_down error of OpenID CIBA requires. */
         SlowDown: {
             headers: {
@@ -3536,6 +3670,38 @@ export interface operations {
             404: components["responses"]["NotFound"];
             413: components["responses"]["PayloadTooLarge"];
             500: components["responses"]["InternalError"];
+        };
+    };
+    createDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftRequest"];
+            };
+        };
+        responses: {
+            /** @description The draft, not applied yet. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Draft"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            413: components["responses"]["PayloadTooLarge"];
+            422: components["responses"]["Untranslatable"];
+            429: components["responses"]["TooManyDrafts"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["Unavailable"];
         };
     };
     getRule: {
