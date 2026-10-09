@@ -1592,6 +1592,7 @@ export interface components {
             record_content: boolean;
             status: components["schemas"]["AgentStatus"];
             spent?: components["schemas"]["AgentSpent"];
+            risk?: components["schemas"]["AgentRisk"];
             /**
              * Format: uuid
              * @description The trust rule that gives the agent its identity, when the agent proves it with the tokens of its platform.
@@ -2135,6 +2136,19 @@ export interface components {
                 [key: string]: unknown;
             }[];
         };
+        /** @description The risk level that Paidwen computes from the permissions and the behavior of the agent, every 5 minutes. The level is the highest level of its reasons, and never lower than the declared risk_level. */
+        AgentRisk: {
+            level: components["schemas"]["RiskLevel"];
+            /** Format: date-time */
+            computed_at?: string;
+            /** @description The reasons of the level. Only the reading of one agent returns them. */
+            reasons?: components["schemas"]["RiskReason"][];
+        };
+        RiskReason: {
+            code: string;
+            level: components["schemas"]["RiskLevel"];
+            text: string;
+        };
         SnapshotAgent: {
             id: string;
             name: string;
@@ -2142,6 +2156,7 @@ export interface components {
             team?: string;
             environment: components["schemas"]["Environment"];
             risk_level?: components["schemas"]["RiskLevel"];
+            risk?: components["schemas"]["RiskLevel"];
             labels?: components["schemas"]["Labels"];
             /** @description The SHA-256 digests of the active keys of the agent, in hexadecimal. */
             key_digests: string[];
