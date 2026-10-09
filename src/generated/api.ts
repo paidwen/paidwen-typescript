@@ -1850,7 +1850,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             name?: string;
-            /** @description A CEL expression that returns a boolean. It reads five variables: agent, tool, params, cost and now. */
+            /** @description A CEL expression that returns a boolean. It reads six variables: agent, tool, params, cost, now and firewall. */
             condition: string;
             verdict: components["schemas"]["Verdict"];
             mode: components["schemas"]["RuleMode"];
