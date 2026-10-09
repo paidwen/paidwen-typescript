@@ -16,9 +16,10 @@ import {
   type SpanExporter,
   type SpanProcessor,
 } from "@opentelemetry/sdk-trace-base";
-import { silently } from "./context.ts";
+import { scope, silently } from "./context.ts";
 
 export const ACTION_STARTED = "paidwen.action.started";
+const CONVERSATION_ID = "gen_ai.conversation.id";
 const SCOPE = "paidwen";
 const SETTLE_LIMIT_MS = 1000;
 const MODEL_OPERATIONS = new Set(["chat", "text_completion", "generate_content", "embeddings"]);
@@ -48,6 +49,35 @@ class SilentExporter implements SpanExporter {
 export function isModelCall(span: ReadableSpan): boolean {
   const operation = span.attributes["gen_ai.operation.name"];
   return typeof operation === "string" && MODEL_OPERATIONS.has(operation);
+}
+
+function sessionAttributes(): Attributes {
+  const session = scope().sessionId;
+  return session === undefined ? {} : { [CONVERSATION_ID]: session };
+}
+
+function inSession(span: ReadableSpan): ReadableSpan {
+  const session = scope().sessionId;
+  if (session === undefined || span.attributes[CONVERSATION_ID] !== undefined) return span;
+  return {
+    name: span.name,
+    kind: span.kind,
+    spanContext: () => span.spanContext(),
+    parentSpanContext: span.parentSpanContext,
+    startTime: span.startTime,
+    endTime: span.endTime,
+    status: span.status,
+    attributes: { ...span.attributes, [CONVERSATION_ID]: session },
+    links: span.links,
+    events: span.events,
+    duration: span.duration,
+    ended: span.ended,
+    resource: span.resource,
+    instrumentationScope: span.instrumentationScope,
+    droppedAttributesCount: span.droppedAttributesCount,
+    droppedEventsCount: span.droppedEventsCount,
+    droppedLinksCount: span.droppedLinksCount,
+  };
 }
 
 export interface JournalOptions {
@@ -99,6 +129,7 @@ export class Journal {
         attributes: {
           "gen_ai.operation.name": "execute_tool",
           "gen_ai.tool.name": name,
+          ...sessionAttributes(),
           ...attributes,
         },
       },
@@ -110,7 +141,7 @@ export class Journal {
     const exporter = this.#exporter;
     if (!exporter || !isModelCall(span)) return;
     const sent = new Promise<void>((resolve) => {
-      exporter.export([span], (result) => {
+      exporter.export([inSession(span)], (result) => {
         if (result.code !== ExportResultCode.SUCCESS) {
           console.warn(`Paidwen could not send a model call to the journal: ${result.error}`);
         }

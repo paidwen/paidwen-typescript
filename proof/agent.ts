@@ -57,6 +57,87 @@ async function refund(): Promise<void> {
   await paidwen.shutdown();
 }
 
+function conversationTurn(
+  provider: BasicTracerProvider,
+  input: Record<string, unknown>[],
+  output: Record<string, unknown>[],
+): void {
+  const span = provider.getTracer("reference-agent").startSpan(`chat ${MODEL}`, {
+    attributes: {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "openai",
+      "gen_ai.request.model": MODEL,
+    },
+  });
+  span.setAttributes({
+    "gen_ai.response.model": MODEL,
+    "gen_ai.usage.input_tokens": 1_200,
+    "gen_ai.usage.output_tokens": 180,
+    "gen_ai.system_instructions": JSON.stringify([
+      { type: "text", content: "You help the customers of the shop." },
+    ]),
+    "gen_ai.input.messages": JSON.stringify(input),
+    "gen_ai.output.messages": JSON.stringify(output),
+  });
+  span.end();
+}
+
+async function session(sessionId: string): Promise<void> {
+  const paidwen = new Paidwen({
+    onWait: (wait) => emit({ event: "waiting", approval_id: wait.approvalId, at: now() }),
+  });
+  const provider = new BasicTracerProvider({ spanProcessors: [paidwen.spanProcessor()] });
+  const payments = paidwen.tool(
+    "payments.refund",
+    async (params: { order: string; amount: number; reason: string }) => ({
+      refund: `re_${params.order}`,
+    }),
+    { cost: { estimated_usd: 0.3 } },
+  );
+  const question = {
+    role: "user",
+    parts: [
+      { type: "text", content: "My parcel for order 4821 never arrived. Can I get a refund?" },
+    ],
+  };
+  const plan = {
+    role: "assistant",
+    parts: [
+      {
+        type: "reasoning",
+        content: "The carrier lost the parcel, so a full refund fits the policy.",
+      },
+      {
+        type: "tool_call",
+        id: "call_4821",
+        name: "payments.refund",
+        arguments: { order: "ord_4821", amount: 2500, reason: "lost parcel" },
+      },
+    ],
+    finish_reason: "tool_call",
+  };
+  const actionId = randomUUID();
+  emit({ event: "asking", action_id: actionId, session_id: sessionId, at: now() });
+  const result = await paidwen.context({ actionId, sessionId }, async () => {
+    conversationTurn(provider, [question], [plan]);
+    const refunded = await payments({ order: "ord_4821", amount: 2500, reason: "lost parcel" });
+    const answer = {
+      role: "tool",
+      parts: [{ type: "tool_call_response", id: "call_4821", response: refunded }],
+    };
+    const reply = {
+      role: "assistant",
+      parts: [{ type: "text", content: "Your refund of 25.00 USD is on its way." }],
+      finish_reason: "stop",
+    };
+    conversationTurn(provider, [question, plan, answer], [reply]);
+    return refunded;
+  });
+  emit({ event: "done", action_id: actionId, session_id: sessionId, result });
+  await provider.shutdown();
+  await paidwen.shutdown();
+}
+
 async function loop(parallel: number): Promise<void> {
   const paidwen = new Paidwen();
   const provider = new BasicTracerProvider({ spanProcessors: [paidwen.spanProcessor()] });
@@ -115,12 +196,14 @@ async function httpCalls(
 const [mode, argument, extra, variant] = process.argv.slice(2);
 if (mode === "refund") {
   await refund();
+} else if (mode === "session" && argument) {
+  await session(argument);
 } else if (mode === "loop") {
   await loop(Number(argument ?? "1"));
 } else if (mode === "http" && argument) {
   await httpCalls(argument, Number(extra ?? "1000"), 100, variant === "captured");
 } else {
   throw new Error(
-    "usage: node proof/agent.ts refund | loop [parallel] | http <url> [calls] [plain|captured]",
+    "usage: node proof/agent.ts refund | session <id> | loop [parallel] | http <url> [calls] [plain|captured]",
   );
 }

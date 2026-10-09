@@ -726,6 +726,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/agent-sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the sessions of the agents, the most recent first, read from the journal.
+         * @description A session gathers the journal lines that carry the same gen_ai.conversation.id, which the SDK sets from the session_id of its context. Each session carries an opaque cursor, and before reads the sessions that ended earlier.
+         */
+        get: operations["listAgentSessions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: components["parameters"]["SessionID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read the steps of a session in the order of time, read from the journal.
+         * @description A step is a call to the model or an action. A call to the model shows only the input messages that the previous call of the same agent did not already show. An action holds its decision, its human answer and its execution. after reads the steps that follow a cursor.
+         */
+        get: operations["getAgentSession"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/agents/{agent_id}/activity": {
         parameters: {
             query?: never;
@@ -2166,6 +2208,110 @@ export interface components {
             incident?: components["schemas"]["IncidentReference"];
             execution?: components["schemas"]["AuditExecution"];
         };
+        /** @description A session of one or more agents, read from the journal. */
+        AgentSession: {
+            id: string;
+            /** @description The opaque position of the session, for the before parameter. */
+            cursor: string;
+            agents: components["schemas"]["AuditAgent"][];
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            ended_at: string;
+            /**
+             * Format: int64
+             * @description The calls to the model and the actions of the session.
+             */
+            steps: number;
+            /** Format: int64 */
+            decisions: number;
+            /**
+             * Format: int64
+             * @description The decisions that blocked their action.
+             */
+            blocked: number;
+            /**
+             * Format: int64
+             * @description The decisions that waited for a human answer.
+             */
+            waited: number;
+            /**
+             * Format: int64
+             * @description The calls to the model and the executions that ended in error.
+             */
+            errors: number;
+            /**
+             * Format: double
+             * @description The cost that the budgets count for the session.
+             */
+            cost_usd: number;
+        };
+        AgentSessionList: {
+            data: components["schemas"]["AgentSession"][];
+            has_more: boolean;
+        };
+        /** @description A message of a call to the model, as the OpenTelemetry conventions for generative AI describe it. Each part carries its type, such as text, reasoning, tool_call or tool_call_response. */
+        ModelMessage: {
+            role: string;
+            parts: ({
+                type: string;
+            } & {
+                [key: string]: unknown;
+            })[];
+            finish_reason?: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** @description A call to the model, read from its journal line. */
+        SessionModelCall: {
+            span_id: string;
+            agent: components["schemas"]["AuditAgent"];
+            provider?: string;
+            model?: string;
+            operation?: string;
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            ended_at: string;
+            /** @enum {string} */
+            status: "ok" | "error";
+            error_type?: string;
+            /** Format: int64 */
+            input_tokens?: number;
+            /** Format: int64 */
+            output_tokens?: number;
+            /** Format: double */
+            cost_usd?: number;
+            /**
+             * Format: int64
+             * @description The input messages left out because the previous call of the agent already showed them.
+             */
+            history: number;
+            /** @description The instructions of the call, when they differ from those of the previous call of the agent. */
+            system_instructions?: {
+                [key: string]: unknown;
+            }[];
+            input?: components["schemas"]["ModelMessage"][];
+            output?: components["schemas"]["ModelMessage"][];
+        };
+        SessionStep: {
+            /** @enum {string} */
+            kind: "model_call" | "action";
+            /**
+             * Format: date-time
+             * @description The start of a call to the model, or the decision of an action.
+             */
+            at: string;
+            /** @description The opaque position of the step, for the after parameter. */
+            cursor: string;
+            model_call?: components["schemas"]["SessionModelCall"];
+            action?: components["schemas"]["AuditRecord"];
+        };
+        SessionStepList: {
+            session_id: string;
+            data: components["schemas"]["SessionStep"][];
+            has_more: boolean;
+        };
         ActionList: {
             data: components["schemas"]["Action"][];
             has_more: boolean;
@@ -2579,6 +2725,11 @@ export interface components {
         TeamHandle: components["schemas"]["TeamHandle"];
         /** @description The handle of the last team of the previous page. */
         TeamStartingAfter: components["schemas"]["TeamHandle"];
+        SessionID: string;
+        /** @description The cursor of a session. The page holds the sessions that ended before it. */
+        SessionBefore: string;
+        /** @description The cursor of a step. The page holds the steps that follow it. */
+        StepAfter: string;
         ApprovalID: string;
         ActionID: string;
         /** @description The secret of the personal link, 32 random bytes in unpadded base64url. */
@@ -4242,6 +4393,75 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CostReport"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    listAgentSessions: {
+        parameters: {
+            query?: {
+                /** @description The number of items in the page, from 1 to 100. */
+                limit?: components["parameters"]["Limit"];
+                /** @description The cursor of a session. The page holds the sessions that ended before it. */
+                before?: components["parameters"]["SessionBefore"];
+                /** @description Only the actions of this agent. */
+                agent_id?: components["parameters"]["AgentFilter"];
+                /** @description The start of the period, included. */
+                from?: components["parameters"]["PeriodStart"];
+                /** @description The end of the period, excluded. */
+                to?: components["parameters"]["PeriodEnd"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of sessions. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSessionList"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    getAgentSession: {
+        parameters: {
+            query?: {
+                /** @description The number of items in the page, from 1 to 100. */
+                limit?: components["parameters"]["Limit"];
+                /** @description The cursor of a step. The page holds the steps that follow it. */
+                after?: components["parameters"]["StepAfter"];
+            };
+            header?: never;
+            path: {
+                session_id: components["parameters"]["SessionID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of steps. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionStepList"];
                 };
             };
             400: components["responses"]["InvalidRequest"];

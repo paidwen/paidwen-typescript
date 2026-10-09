@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, it } from "node:test";
 import { context, trace } from "@opentelemetry/api";
 import { AsyncLocalStorageContextManager } from "@opentelemetry/context-async-hooks";
-import { BasicTracerProvider } from "@opentelemetry/sdk-trace-base";
+import {
+  BasicTracerProvider,
+  InMemorySpanExporter,
+  SimpleSpanProcessor,
+} from "@opentelemetry/sdk-trace-base";
 import { DeniedError, Paidwen } from "../src/index.ts";
 import { bodyOf, decision, FakePaidwen, until } from "./fake.ts";
 
@@ -90,6 +94,80 @@ describe("the journal of the SDK", () => {
     const spans = fake.spans();
     assert.equal(spans.length, 1, "only the model call is sent");
     assert.equal(spans[0]?.attributes["gen_ai.request.model"], "gpt-4o-mini");
+    await provider.shutdown();
+    await paidwen.shutdown();
+  });
+
+  it("gives the session of the context to the tool call", async () => {
+    const paidwen = new Paidwen({ apiKey: "pw_test_key", baseUrl: fake.url });
+    await paidwen.context({ sessionId: "session-4821" }, () =>
+      paidwen.tool("search", async () => undefined)({}),
+    );
+    await paidwen.flush();
+    await until("the span", () => fake.spans().length === 1);
+    assert.equal(fake.spans()[0]?.attributes["gen_ai.conversation.id"], "session-4821");
+    await paidwen.shutdown();
+  });
+
+  it("gives the session of the context to the copy of the model call it sends", async () => {
+    const paidwen = new Paidwen({ apiKey: "pw_test_key", baseUrl: fake.url });
+    const own = new InMemorySpanExporter();
+    const provider = new BasicTracerProvider({
+      spanProcessors: [paidwen.spanProcessor(), new SimpleSpanProcessor(own)],
+    });
+    paidwen.context({ sessionId: "session-4821" }, () =>
+      provider
+        .getTracer("an-instrumentation")
+        .startSpan("chat gpt-4o-mini", {
+          attributes: { "gen_ai.operation.name": "chat", "gen_ai.request.model": "gpt-4o-mini" },
+        })
+        .end(),
+    );
+    await provider.forceFlush();
+    await until("the model call", () => fake.spans().length === 1);
+    const [sent] = fake.spans();
+    const [kept] = own.getFinishedSpans();
+    assert.equal(sent?.attributes["gen_ai.conversation.id"], "session-4821");
+    assert.equal(sent?.attributes["gen_ai.request.model"], "gpt-4o-mini");
+    assert.equal(sent?.name, "chat gpt-4o-mini");
+    assert.equal(sent?.traceId, kept?.spanContext().traceId);
+    assert.equal(sent?.spanId, kept?.spanContext().spanId);
+    assert.equal(kept?.attributes["gen_ai.conversation.id"], undefined);
+    await provider.shutdown();
+    await paidwen.shutdown();
+  });
+
+  it("keeps the session that a model call already carries", async () => {
+    const paidwen = new Paidwen({ apiKey: "pw_test_key", baseUrl: fake.url });
+    const provider = new BasicTracerProvider({ spanProcessors: [paidwen.spanProcessor()] });
+    paidwen.context({ sessionId: "session-4821" }, () =>
+      provider
+        .getTracer("an-instrumentation")
+        .startSpan("chat gpt-4o-mini", {
+          attributes: { "gen_ai.operation.name": "chat", "gen_ai.conversation.id": "thread-17" },
+        })
+        .end(),
+    );
+    await provider.forceFlush();
+    await until("the model call", () => fake.spans().length === 1);
+    assert.equal(fake.spans()[0]?.attributes["gen_ai.conversation.id"], "thread-17");
+    await provider.shutdown();
+    await paidwen.shutdown();
+  });
+
+  it("gives no session to any span outside a context", async () => {
+    const paidwen = new Paidwen({ apiKey: "pw_test_key", baseUrl: fake.url });
+    const provider = new BasicTracerProvider({ spanProcessors: [paidwen.spanProcessor()] });
+    provider
+      .getTracer("an-instrumentation")
+      .startSpan("chat gpt-4o-mini", { attributes: { "gen_ai.operation.name": "chat" } })
+      .end();
+    await paidwen.tool("search", async () => undefined)({});
+    await paidwen.flush();
+    await until("the spans", () => fake.spans().length === 2);
+    for (const span of fake.spans()) {
+      assert.equal(span.attributes["gen_ai.conversation.id"], undefined);
+    }
     await provider.shutdown();
     await paidwen.shutdown();
   });
