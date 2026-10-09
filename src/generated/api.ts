@@ -516,6 +516,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export the evidence pack of a framework for a period, as a signed ZIP file.
+         * @description The pack holds the complete lists that an auditor samples from, in CSV and in JSON Lines, a report that sorts them under the requirements of the framework, a manifest with the SHA-256 digest of every file, and the RSA signature of the manifest. It is not an audit report. HIPAA and the AI Act need the agents in scope. The period lasts at most 366 days.
+         */
+        get: operations["exportEvidence"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/evidence/keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the public keys that sign the evidence packs.
+         * @description The manifest of a pack names its key in key_id. A retired key stays in the list, so that its packs still verify.
+         */
+        get: operations["listEvidenceKeys"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/audit/actions/{action_id}": {
         parameters: {
             query?: never;
@@ -1666,7 +1706,10 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             revoked_at: string | null;
-            /** @description The key itself, shown only in this response. */
+            /**
+             * Format: password
+             * @description The key itself, shown only in this response.
+             */
             secret: string;
         };
         AgentKeyList: {
@@ -1985,13 +2028,19 @@ export interface components {
             name?: string;
             members?: string[];
             slack_channel?: string | null;
-            /** @description The address of the webhook that a Teams workflow gives. Null removes it. */
+            /**
+             * Format: password
+             * @description The address of the webhook that a Teams workflow gives. Null removes it.
+             */
             teams_webhook_url?: string | null;
             expires_in?: components["schemas"]["ExpiresIn"];
             on_expiry?: components["schemas"]["OnExpiry"];
             default_for?: components["schemas"]["WaitingVerdict"][];
         };
-        /** @description The address of the webhook that a Teams workflow gives, such as the template Send webhook alerts to a channel. Its host ends with .environment.api.powerplatform.com. The service seals it and shows only its host afterwards. */
+        /**
+         * Format: password
+         * @description The address of the webhook that a Teams workflow gives, such as the template Send webhook alerts to a channel. Its host ends with .environment.api.powerplatform.com. The service seals it and shows only its host afterwards.
+         */
         TeamsWebhookURL: string;
         /** @description The handle of a team, which never changes, for example customer-support. */
         TeamHandle: string;
@@ -2109,6 +2158,27 @@ export interface components {
             /** @enum {string} */
             status: "ok" | "error";
             error_type?: string;
+        };
+        EvidenceKeyList: {
+            data: components["schemas"]["EvidenceKey"][];
+        };
+        EvidenceKey: {
+            /** @description The RFC 7638 thumbprint of the key, as manifest.json names it. */
+            key_id: string;
+            /**
+             * @description RSASSA-PKCS1-v1_5 with SHA-256, over the bytes of manifest.json.
+             * @enum {string}
+             */
+            algorithm: "RS256";
+            /** @description The public key in PEM, for openssl dgst -verify. */
+            public_key: string;
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description When the key stopped signing. Its packs still verify.
+             */
+            retires_at?: string;
         };
         /** @description Who did an action, when, why, with which agent and with which permission, read from the journal only. */
         AuditRecord: {
@@ -2627,6 +2697,7 @@ export interface components {
             return_to?: string;
         };
         EmailLinkVerification: {
+            /** Format: password */
             token: string;
         };
         OrganizationCreate: {
@@ -2691,6 +2762,7 @@ export interface components {
             has_more: boolean;
         };
         InvitationAcceptance: {
+            /** Format: password */
             token: string;
         };
         AdminKey: {
@@ -2714,7 +2786,10 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             revoked_at: string | null;
-            /** @description The key itself, shown only in this response. */
+            /**
+             * Format: password
+             * @description The key itself, shown only in this response.
+             */
             secret: string;
         };
         AdminKeyList: {
@@ -2975,6 +3050,10 @@ export interface components {
         To: string;
         /** @description Only the actions of this agent. */
         AgentFilter: string;
+        /** @description The framework whose requirements sort the lists. */
+        EvidenceFramework: "soc2" | "iso27001" | "hipaa" | "ai-act";
+        /** @description The agents in scope. HIPAA and the AI Act need at least one. */
+        EvidenceAgents: string[];
         /** @description json for a JSON array of records, csv for a CSV file with one line per action. */
         AuditFormat: "json" | "csv";
         IncidentID: string;
@@ -4304,6 +4383,64 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    exportEvidence: {
+        parameters: {
+            query: {
+                /** @description The framework whose requirements sort the lists. */
+                framework: components["parameters"]["EvidenceFramework"];
+                /** @description The start of the period, included. */
+                from: components["parameters"]["From"];
+                /** @description The end of the period, excluded. */
+                to: components["parameters"]["To"];
+                /** @description The agents in scope. HIPAA and the AI Act need at least one. */
+                agent_id?: components["parameters"]["EvidenceAgents"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The evidence pack. */
+            200: {
+                headers: {
+                    /** @description The name of the file. */
+                    "Content-Disposition"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/zip": string;
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    listEvidenceKeys: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The public keys. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidenceKeyList"];
+                };
+            };
             500: components["responses"]["InternalError"];
             503: components["responses"]["Unavailable"];
         };
