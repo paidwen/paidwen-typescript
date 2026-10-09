@@ -405,6 +405,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/approval-requests/{approval_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                approval_id: components["parameters"]["ApprovalID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read an action that waits or waited for a human answer.
+         * @description The dashboard opens an approval by its identifier, for example from the buttons of the card that Microsoft Teams shows.
+         */
+        get: operations["getApprovalRequest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/approvals/{approval_id}/answer": {
         parameters: {
             query?: never;
@@ -1752,6 +1774,8 @@ export interface components {
             members: string[];
             /** @description The Slack channel that receives the request, in the workspace connected to the organization. */
             slack_channel?: string;
+            /** @description The host of the Microsoft Teams webhook that receives the request. The service keeps the address sealed and never shows it again. */
+            teams_webhook_host?: string;
             expires_in: components["schemas"]["ExpiresIn"];
             on_expiry: components["schemas"]["OnExpiry"];
             /** @description The verdicts this group answers when a rule names no group. */
@@ -1765,6 +1789,7 @@ export interface components {
             name: string;
             members: string[];
             slack_channel?: string;
+            teams_webhook_url?: components["schemas"]["TeamsWebhookURL"];
             /**
              * Format: int32
              * @default 300
@@ -1781,10 +1806,14 @@ export interface components {
             name?: string;
             members?: string[];
             slack_channel?: string | null;
+            /** @description The address of the webhook that a Teams workflow gives. Null removes it. */
+            teams_webhook_url?: string | null;
             expires_in?: components["schemas"]["ExpiresIn"];
             on_expiry?: components["schemas"]["OnExpiry"];
             default_for?: components["schemas"]["WaitingVerdict"][];
         };
+        /** @description The address of the webhook that a Teams workflow gives, such as the template Send webhook alerts to a channel. Its host ends with .environment.api.powerplatform.com. The service seals it and shows only its host afterwards. */
+        TeamsWebhookURL: string;
         /** @description The handle of a team, which never changes, for example customer-support. */
         TeamHandle: string;
         Team: {
@@ -3568,6 +3597,7 @@ export interface operations {
             409: components["responses"]["Conflict"];
             413: components["responses"]["PayloadTooLarge"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["Unavailable"];
         };
     };
     getApprovalGroup: {
@@ -3654,6 +3684,7 @@ export interface operations {
             409: components["responses"]["Conflict"];
             413: components["responses"]["PayloadTooLarge"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["Unavailable"];
         };
     };
     listApprovals: {
@@ -3679,6 +3710,33 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApprovalRequestList"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getApprovalRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                approval_id: components["parameters"]["ApprovalID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The approval. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalRequest"];
                 };
             };
             400: components["responses"]["InvalidRequest"];
