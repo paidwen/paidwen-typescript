@@ -293,8 +293,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Write a rule, permissions or a budget from a sentence.
-         * @description A model translates the sentence into an exact rule, permissions or budget. Paidwen checks the draft, reads it back from the exact result, replays it on the decisions of the last 30 days and lists its warnings. Nothing changes until the draft is sent to the route that creates it. The model writes the draft and never decides an action.
+         * Write a rule, permissions or a budget from a sentence, or check a rule written in CEL.
+         * @description A model translates the sentence into an exact rule, permissions or budget. Paidwen checks the draft, reads it back from the exact result, replays it on the decisions of the last 30 days and lists its warnings. A rule written in CEL goes through the same check, without the model. Nothing changes until the draft is sent to the route that creates it. The model writes the draft and never decides an action.
          */
         post: operations["createDraft"];
         delete?: never;
@@ -1876,14 +1876,23 @@ export interface components {
             /** @description The sentence the rule was written from, kept for the audit. */
             source_text?: string;
         };
+        /** @description Either a sentence that the model translates, or a rule written in CEL that Paidwen checks without the model. Send text or rule, never both. */
         DraftRequest: {
             /** @description The sentence, in any language. */
-            text: string;
+            text?: string;
             /**
              * Format: uuid
              * @description The agent the sentence is about, when the sentence comes from the page of an agent. A sentence that names another agent keeps it.
              */
             agent_id?: string;
+            rule?: components["schemas"]["DraftRule"];
+        };
+        /** @description A rule written in CEL. Paidwen reads it back and replays it on the decisions of the last 30 days, without the model, and without counting it in the drafts of the day. */
+        DraftRule: {
+            condition: string;
+            verdict: components["schemas"]["Verdict"];
+            /** Format: uuid */
+            approval_group_id?: string;
         };
         /** @enum {string} */
         DraftKind: "rule" | "permissions" | "budget";
