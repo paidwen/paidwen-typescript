@@ -23,6 +23,8 @@ const CONVERSATION_ID = "gen_ai.conversation.id";
 const SCOPE = "paidwen";
 const SETTLE_LIMIT_MS = 1000;
 const MODEL_OPERATIONS = new Set(["chat", "text_completion", "generate_content", "embeddings"]);
+const TOOL_RESULT = "gen_ai.tool.call.result";
+const ATTRIBUTE_LENGTH_LIMIT = 65_536;
 
 class SilentExporter implements SpanExporter {
   readonly #inner: SpanExporter;
@@ -80,10 +82,21 @@ function inSession(span: ReadableSpan): ReadableSpan {
   };
 }
 
+function serialized(result: unknown): string | undefined {
+  if (typeof result === "string") return result;
+  try {
+    const json: unknown = JSON.stringify(result);
+    return typeof json === "string" ? json : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export interface JournalOptions {
   endpoint: string;
   authorization: () => Promise<string>;
   enabled: boolean;
+  captureContent: boolean;
   version: string;
 }
 
@@ -91,6 +104,7 @@ export class Journal {
   readonly #provider: BasicTracerProvider;
   readonly #tracer: Tracer;
   readonly #exporter: SpanExporter | undefined;
+  readonly #captureContent: boolean;
   readonly #pending = new Set<Promise<void>>();
 
   constructor(options: JournalOptions) {
@@ -116,9 +130,11 @@ export class Journal {
         "service.name": "paidwen-sdk",
         "telemetry.sdk.language": "nodejs",
       }),
+      spanLimits: { attributeValueLengthLimit: ATTRIBUTE_LENGTH_LIMIT },
       spanProcessors,
     });
     this.#tracer = this.#provider.getTracer(SCOPE, options.version);
+    this.#captureContent = options.captureContent;
   }
 
   startTool(name: string, attributes: Attributes): Span {
@@ -135,6 +151,12 @@ export class Journal {
       },
       current(),
     );
+  }
+
+  setResult(span: Span, result: unknown): void {
+    if (!this.#captureContent) return;
+    const value = serialized(result);
+    if (value !== undefined) span.setAttribute(TOOL_RESULT, value);
   }
 
   report(span: ReadableSpan): void {

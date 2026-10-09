@@ -89,6 +89,7 @@ const SLOW_DOWN_SECONDS = 5;
 const WAIT_GRACE_SECONDS = 60;
 const MISSING_IDENTITY =
   "Paidwen needs an agent key or an identity token: pass apiKey, identityTokenFile or identityToken, or set PAIDWEN_API_KEY or PAIDWEN_IDENTITY_TOKEN_FILE.";
+const CAPTURED_CONTENT = new Set(["true", "span_only", "span_and_event"]);
 const CAPTURED = Symbol.for("paidwen.mcp");
 const HTTP_CAPTURED = Symbol.for("paidwen.http");
 const processState = globalThis as unknown as Record<symbol, true | undefined>;
@@ -141,6 +142,7 @@ export class Paidwen {
       endpoint: `${this.#base}/v1/traces`,
       authorization: () => credentials.authorization(),
       enabled: options.journal ?? true,
+      captureContent: capturesContent(),
       version: VERSION,
     });
   }
@@ -356,6 +358,7 @@ export class Paidwen {
       await this.#authorize(input, span);
       started(span);
       const result = await this.#inside(span, action);
+      this.#journal.setResult(span, result);
       finish(span);
       return result;
     } catch (error) {
@@ -609,6 +612,11 @@ function credentialsOf(
 
 function environment(name: string): string | undefined {
   return typeof process === "undefined" ? undefined : process.env[name] || undefined;
+}
+
+function capturesContent(): boolean {
+  const mode = environment("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT") ?? "";
+  return CAPTURED_CONTENT.has(mode.toLowerCase());
 }
 
 function isObject(value: unknown): value is Record<PropertyKey, unknown> {

@@ -5,7 +5,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { DeniedError, Paidwen, PaidwenError, PendingError, type Verdict } from "../src/index.ts";
-import { AGENT_ID, CLIENT_TRACEPARENT } from "./fake.ts";
+import { AGENT_ID, CLIENT_TRACEPARENT, FakePaidwen, until } from "./fake.ts";
 
 interface Asked {
   tool: { name: string; kind: string; server?: string };
@@ -121,6 +121,28 @@ describe("mcp", () => {
       { traceparent: decided[0], baggage: own },
       { traceparent: CLIENT_TRACEPARENT, tenant: "acme", baggage: own },
     ]);
+  });
+
+  it("sends the answer of a captured tools/call as the result of its span", async () => {
+    const fake = await new FakePaidwen().start();
+    process.env.OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = "true";
+    const paidwen = new Paidwen({ apiKey: "pw_test_key", baseUrl: fake.url });
+    delete process.env.OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT;
+    const client = await connect([]);
+    const release = paidwen.mcp(client);
+    try {
+      await client.callTool({ name: "refund", arguments: { amount: 120 } });
+      await paidwen.flush();
+      await until("the span", () => fake.spans().length === 1);
+      assert.equal(
+        fake.spans()[0]?.attributes["gen_ai.tool.call.result"],
+        '{"content":[{"type":"text","text":"refunded 120"}]}',
+      );
+    } finally {
+      release();
+      await paidwen.shutdown();
+      await fake.stop();
+    }
   });
 
   it("never sends a refused call to the server", async () => {

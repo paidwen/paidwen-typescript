@@ -8,7 +8,10 @@ import {
   SimpleSpanProcessor,
 } from "@opentelemetry/sdk-trace-base";
 import { DeniedError, Paidwen } from "../src/index.ts";
-import { bodyOf, decision, FakePaidwen, until } from "./fake.ts";
+import { bodyOf, decision, FakePaidwen, type Span, until } from "./fake.ts";
+
+const CAPTURE = "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT";
+const RESULT = "gen_ai.tool.call.result";
 
 describe("the journal of the SDK", () => {
   const fake = new FakePaidwen();
@@ -26,6 +29,23 @@ describe("the journal of the SDK", () => {
     fake.traces.length = 0;
     fake.answer = (request) => decision(request, "allow");
   });
+
+  function capturing(mode: string | undefined): Paidwen {
+    if (mode === undefined) delete process.env[CAPTURE];
+    else process.env[CAPTURE] = mode;
+    try {
+      return new Paidwen({ apiKey: "pw_test_key", baseUrl: fake.url });
+    } finally {
+      delete process.env[CAPTURE];
+    }
+  }
+
+  async function sent(paidwen: Paidwen, count: number): Promise<Span[]> {
+    await paidwen.flush();
+    await until("the spans", () => fake.spans().length === count);
+    await paidwen.shutdown();
+    return fake.spans();
+  }
 
   it("sends each tool call as an execute_tool span with the key of the agent", async () => {
     const paidwen = new Paidwen({ apiKey: "pw_test_key", baseUrl: fake.url });
@@ -194,5 +214,84 @@ describe("the journal of the SDK", () => {
     await paidwen.tool("search", async () => undefined)({});
     await paidwen.flush();
     assert.equal(fake.traces.length, 0);
+  });
+
+  it("sends what each tool returns when the content capture is on", async () => {
+    const paidwen = capturing("true");
+    const refund = { refund: "re_1", amount: 120, currency: "EUR", note: "remboursé" };
+    assert.equal(await paidwen.tool("search", async () => "3 orders")({}), "3 orders");
+    assert.equal(
+      await paidwen.tool("payments.refund", async () => refund)({ amount: 120 }),
+      refund,
+    );
+    const [search, refunded] = await sent(paidwen, 2);
+    assert.equal(search?.attributes[RESULT], "3 orders");
+    assert.equal(
+      refunded?.attributes[RESULT],
+      '{"refund":"re_1","amount":120,"currency":"EUR","note":"remboursé"}',
+    );
+  });
+
+  it("sends the result with span_only and span_and_event, in upper or lower case", async () => {
+    for (const mode of ["SPAN_ONLY", "span_and_event"]) {
+      fake.traces.length = 0;
+      const paidwen = capturing(mode);
+      await paidwen.tool("search", async () => "3 orders")({});
+      const [span] = await sent(paidwen, 1);
+      assert.equal(span?.attributes[RESULT], "3 orders", mode);
+    }
+  });
+
+  it("sends no result when the content capture is off", async () => {
+    for (const mode of [undefined, "false", "EVENT_ONLY"]) {
+      fake.traces.length = 0;
+      const paidwen = capturing(mode);
+      await paidwen.tool("search", async () => "3 orders")({});
+      const [span] = await sent(paidwen, 1);
+      assert.equal(span?.attributes[RESULT], undefined, mode);
+    }
+  });
+
+  it("sends no result when the tool throws or Paidwen refuses it", async () => {
+    const paidwen = capturing("true");
+    const search = paidwen.tool("search", async (params: { fail: boolean }) => {
+      if (params.fail) throw new Error("The search timed out.");
+      return "3 orders";
+    });
+    await assert.rejects(search({ fail: true }), { message: "The search timed out." });
+    fake.answer = (request) => decision(request, "block", { rule_id: "no-search" });
+    await assert.rejects(search({ fail: false }), DeniedError);
+    const spans = await sent(paidwen, 2);
+    assert.deepEqual(
+      spans.map((span) => [span.status, span.attributes[RESULT]]),
+      [
+        [2, undefined],
+        [2, undefined],
+      ],
+    );
+  });
+
+  it("sends no result that JSON cannot carry, and the tool still returns it", async () => {
+    const paidwen = capturing("true");
+    const loop: Record<string, unknown> = { order: "4821" };
+    loop.self = loop;
+    assert.equal(await paidwen.tool("search", async () => loop)({}), loop);
+    assert.equal(await paidwen.tool("search", async () => undefined)({}), undefined);
+    const spans = await sent(paidwen, 2);
+    assert.deepEqual(
+      spans.map((span) => [span.status, span.attributes[RESULT]]),
+      [
+        [1, undefined],
+        [1, undefined],
+      ],
+    );
+  });
+
+  it("cuts a result longer than 65,536 characters", async () => {
+    const paidwen = capturing("true");
+    const pages = "x".repeat(70_000);
+    assert.equal(await paidwen.tool("search", async () => pages)({}), pages);
+    const [span] = await sent(paidwen, 1);
+    assert.equal(span?.attributes[RESULT], pages.slice(0, 65_536));
   });
 });

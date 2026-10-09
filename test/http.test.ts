@@ -381,6 +381,18 @@ describe("the HTTP capture", () => {
     await paidwen.shutdown();
   });
 
+  it("sends no result for a captured call, even with the content capture on", async () => {
+    process.env.OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = "true";
+    const paidwen = capture({}, true);
+    delete process.env.OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT;
+    await fetch(`${apiUrl}/v1/refunds`);
+    await paidwen.flush();
+    const spans = fake.spans();
+    assert.equal(spans.length, 1);
+    assert.equal(spans[0]?.attributes["gen_ai.tool.call.result"], undefined);
+    await paidwen.shutdown();
+  });
+
   it("asks nothing for an ignored host", async () => {
     capture({ ignore: ["127.0.0.*"] });
     await fetch(`${apiUrl}/v1/ignored`);
